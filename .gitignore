@@ -1,0 +1,54 @@
+# ========================================
+# IMPORTANTE: Este es el repo PÚBLICO
+# Excluye TODO lo específico de IES Bocairent
+# Para configuración privada, usar: ansible-center-boca
+# ========================================
+
+# Inventarios específicos (van a repo privado)
+inventories/inventory_*.ini
+inventories/vault_secrets.yml
+inventories/*.local.ini
+
+# Contraseñas y secretos
+password_ENV.txt
+.vault_pass
+.vault_pass_local
+.vault_pass_file
+
+# Configuración específica (repo privado)
+.local/
+csshs/
+setup_local_config.local.sh
+setup_local_config.sh
+ansible.cfg.local
+local_vars.sh
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ansible
+*.retry
+.ansible_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.tmp
+*.bak
+*.log

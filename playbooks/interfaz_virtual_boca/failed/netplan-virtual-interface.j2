@@ -1,0 +1,10 @@
+# templates/netplan-virtual-interface.j2
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ virtual_interface }}:
+      addresses:
+        - {{ cidr_alias }}
+      # Opcional: enlazar con la interfaz física
+      link: {{ interface_target }}

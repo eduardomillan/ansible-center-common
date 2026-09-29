@@ -1,0 +1,31 @@
+---
+- name: Verificación rápida de conectividad SSH
+  hosts: all
+  gather_facts: false
+  tasks:
+    # ignore_unreachable mantiene en el play a los equipos inaccesibles
+    # (con ignore_errors o rescue no basta: un "unreachable" no es un "failed").
+    - name: Intentar conexión SSH
+      ansible.builtin.ping:
+      register: connection_test
+      ignore_unreachable: true
+      failed_when: false
+
+    - name: Registrar conexión correcta
+      ansible.builtin.set_fact:
+        connection_status: "CONEXIÓN EXITOSA"
+      when: connection_test.ping | default('') == 'pong'
+
+    - name: Registrar fallo de conexión
+      ansible.builtin.set_fact:
+        connection_status: "APAGADO/INACCESIBLE"
+      when: connection_test.unreachable | default(false)
+
+    - name: Registrar error de autenticación
+      ansible.builtin.set_fact:
+        connection_status: "ERROR AUTENTICACIÓN"
+      when: "'Permission denied' in connection_test.msg | default('')"
+
+    - name: Mostrar resultados
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} - {{ connection_status | default('ERROR: ' ~ connection_test.msg | default('desconocido')) }}"

@@ -1,0 +1,102 @@
+---
+- name: Instalar y configurar Veyon Client en equipos Lliurex 23
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    veyon_paquetes:
+      - veyon-configurator
+      - veyon-plugins
+      - veyon-service
+    # Clave de veyon-cli -> valor deseado
+    veyon_config:
+      Network/Role: "0" # Rol cliente
+      Service/AutoStart: "true" # Auto-arranque
+      Authentication/Method: "0" # Autenticación por inicio de sesión
+      Authentication/Backend: "1" # Backend Builtin
+      UserInterface/NotificationIconEnabled: "false" # Sin notificaciones
+      UserInterface/AccessNotificationEnabled: "false" # Sin notificaciones de acceso
+      UserInterface/ConnectionNotificationEnabled: "false" # Sin notificaciones de conexión
+      AccessControl/Backend: "0" # Access Control con backend por defecto
+      AccessControl/AccessRule: "0" # Permitir todos los usuarios autenticados
+      Service/HideTrayIcon: "true" # Ocultar TrayIcon
+
+  tasks:
+    - name: Verificar que el sistema es Lliurex
+      ansible.builtin.fail:
+        msg: "Este playbook solo es compatible con Lliurex"
+      when: ansible_distribution != "Ubuntu"
+
+    - name: Obtener paquetes instalados
+      ansible.builtin.package_facts:
+
+    - name: Calcular paquetes Veyon que faltan
+      ansible.builtin.set_fact:
+        veyon_faltan: "{{ veyon_paquetes | reject('in', ansible_facts.packages) | list }}"
+
+    # Repoman solo se habilita si hay algo que instalar, y se deshabilita
+    # siempre al terminar (always), aunque falle la instalación.
+    - name: Instalar paquetes Veyon que falten
+      when: veyon_faltan | length > 0
+      block:
+        - name: Habilitar Repoman
+          ansible.builtin.command: repoman-cli -e 2 -y
+          changed_when: true
+
+        - name: Instalar paquetes Veyon Client
+          ansible.builtin.apt:
+            name: "{{ veyon_paquetes }}"
+            state: present
+            update_cache: true
+      always:
+        - name: Deshabilitar Repoman
+          ansible.builtin.command: repoman-cli -d 2 -y
+          changed_when: true
+
+    - name: Leer configuración actual de Veyon
+      ansible.builtin.command: veyon-cli config get {{ item.key }}
+      loop: "{{ veyon_config | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: veyon_config_actual
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Aplicar configuración de Veyon que no coincida
+      ansible.builtin.command: veyon-cli config set {{ item.item.key }} {{ item.item.value }}
+      loop: "{{ veyon_config_actual.results }}"
+      loop_control:
+        label: "{{ item.item.key }} = {{ item.item.value }}"
+      when: item.stdout | trim | lower != item.item.value | string | lower
+      changed_when: true
+      notify: Reiniciar veyon
+
+    - name: Habilitar e iniciar servicio Veyon
+      ansible.builtin.systemd:
+        name: veyon
+        enabled: true
+        state: started
+
+    - name: Verificar configuración aplicada
+      ansible.builtin.shell: |
+        echo "=== CONFIGURACIÓN VEYON ==="
+        echo "Rol: $(veyon-cli config get Network/Role)"
+        echo "AutoStart: $(veyon-cli config get Service/AutoStart)"
+        echo "Método Auth: $(veyon-cli config get Authentication/Method)"
+        echo "Backend Auth: $(veyon-cli config get Authentication/Backend)"
+        echo "Access Control: $(veyon-cli config get AccessControl/Backend)"
+        echo "Access Rule: $(veyon-cli config get AccessControl/AccessRule)"
+      register: config_check
+      changed_when: false
+      check_mode: false
+
+    - name: Mostrar resumen de configuración
+      ansible.builtin.debug:
+        msg: "{{ config_check.stdout_lines + ['Veyon configurado correctamente en ' ~ inventory_hostname ~ ' - Servicio activo'] }}"
+
+  handlers:
+    - name: Reiniciar veyon
+      ansible.builtin.systemd:
+        name: veyon
+        state: restarted

@@ -1,0 +1,81 @@
+# remove_virtual_interfaces.yml
+---
+- name: Eliminar interfaces virtuales de eth0
+  hosts: devices
+  become: yes
+  vars:
+    subred_base: "192.168"
+    interface_target: "eth0"
+
+  tasks:
+    - name: Buscar interfaces virtuales activas
+      ansible.builtin.shell:
+        cmd: "ip addr show | grep -o '{{ interface_target }}:[0-9]\\+' | sort -u || echo ''"
+      register: virtual_interfaces_active
+      changed_when: false
+      
+    - name: Buscar archivos de configuración Netplan de interfaces virtuales
+      ansible.builtin.find:
+        paths: /etc/netplan
+        patterns: "99-virtual-interface-*.yaml"
+        file_type: file
+      register: netplan_files
+      
+    - name: Mostrar interfaces y archivos encontrados
+      debug:
+        msg: |
+          Interfaces virtuales activas: {{ virtual_interfaces_active.stdout_lines }}
+          Archivos Netplan: {{ netplan_files.files | map(attribute='path') | list }}
+          
+    - name: Desactivar interfaces virtuales
+      ansible.builtin.shell:
+        cmd: "ip link set {{ item }} down"
+      loop: "{{ virtual_interfaces_active.stdout_lines }}"
+      when: virtual_interfaces_active.stdout_lines | length > 0
+      ignore_errors: yes
+      
+    - name: Eliminar interfaces virtuales
+      ansible.builtin.shell:
+        cmd: "ip addr show {{ item }} 2>/dev/null | grep -o '{{ subred_base }}\\.[0-9]\\+\\.[0-9]\\+/[0-9]\\+' | head -1"
+      loop: "{{ virtual_interfaces_active.stdout_lines }}"
+      register: ips_por_interfaz
+      changed_when: false
+      
+    - name: Eliminar IPs de las interfaces virtuales
+      ansible.builtin.shell:
+        cmd: "ip addr del {{ item.stdout }}/24 dev {{ item.item }}"
+      loop: "{{ ips_por_interfaz.results }}"
+      when: 
+        - item.stdout != ""
+        - item.stdout is defined
+      ignore_errors: yes
+      
+    - name: Eliminar archivos de configuración Netplan
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ netplan_files.files }}"
+      register: files_removed
+      
+    - name: Aplicar cambios Netplan si se eliminaron archivos
+      ansible.builtin.command:
+        cmd: "netplan apply"
+      when: files_removed.changed
+      async: 30
+      poll: 5
+      
+    - name: Verificar estado final
+      ansible.builtin.shell:
+        cmd: |
+          echo "Interfaces virtuales activas: $(ip addr show | grep -c '{{ interface_target }}:[0-9]')"
+          echo "Archivos Netplan: $(find /etc/netplan -name '99-virtual-interface-*.yaml' 2>/dev/null | wc -l)"
+          echo "Conexiones NM: $(nmcli con show 2>/dev/null | grep -c '{{ interface_target }}:' || echo '0')"
+      register: final_check
+      
+    - name: Mostrar resumen final
+      debug:
+        msg: |
+          📊 RESUMEN ELIMINACIÓN - {{ host_name }}:
+          Interfaces virtuales encontradas: {{ virtual_interfaces_active.stdout_lines | length }}
+          Archivos Netplan eliminados: {{ files_removed.changed | count }}
+          Estado: {{ '✅ LIMPIO' if 'Interfaces virtuales activas: 0' in final_check.stdout else '⚠️  REVISAR' }}

@@ -1,0 +1,81 @@
+---
+# remove_alias_simple.yml
+- name: Eliminar configuración de alias de red
+  hosts: devices
+  become: true
+  vars:
+    subred_base: "192.168"
+    interface_target: "eth0"
+
+  tasks:
+    - name: Buscar archivos de alias Netplan
+      ansible.builtin.find:
+        paths: /etc/netplan
+        patterns: "99-subnet-alias-*.yaml"
+        file_type: file
+      register: netplan_files
+
+    - name: Mostrar archivos encontrados
+      ansible.builtin.debug:
+        msg: "Archivos de alias encontrados: {{ netplan_files.files | map(attribute='path') | list }}"
+
+    - name: Eliminar archivos de alias Netplan
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ netplan_files.files }}"
+      register: files_removed
+      notify: Aplicar netplan
+
+    - name: Obtener IPs alias actuales
+      ansible.builtin.shell:
+        cmd: "set -o pipefail; ip -o addr show {{ interface_target }} | awk '/{{ subred_base }}\\./{print $4}'"
+        executable: /bin/bash
+      register: current_aliases
+      changed_when: false
+      check_mode: false
+
+    - name: Mostrar IPs alias a eliminar
+      ansible.builtin.debug:
+        msg: "IPs alias encontradas: {{ current_aliases.stdout_lines }}"
+
+    # rc 2 + "Cannot assign" = la IP ya no estaba (p. ej. la quitó netplan): no es un error.
+    - name: Eliminar IPs alias temporalmente
+      ansible.builtin.command:
+        cmd: "ip addr del {{ item }} dev {{ interface_target }}"
+      loop: "{{ current_aliases.stdout_lines }}"
+      register: ips_removed
+      changed_when: ips_removed.rc == 0
+      failed_when:
+        - ips_removed.rc != 0
+        - "'Cannot assign' not in ips_removed.stderr"
+
+    - name: Aplicar cambios Netplan antes de verificar
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verificar estado final
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          echo "Archivos Netplan: $(find /etc/netplan -name '99-subnet-alias-*.yaml' 2>/dev/null | wc -l)"
+          echo "IPs alias: $(ip addr show {{ interface_target }} | grep -c '{{ subred_base }}\.')"
+        executable: /bin/bash
+      register: final_check
+      changed_when: false
+      check_mode: false
+
+    - name: Mostrar resumen final
+      ansible.builtin.debug:
+        msg: |
+          📊 RESUMEN ELIMINACIÓN - {{ host_name }}:
+          Archivos Netplan eliminados: {{ files_removed.results | default([]) | selectattr('changed') | list | length }}
+          IPs alias removidas: {{ ips_removed.results | default([]) | selectattr('changed') | list | length }}
+          Estado: {{ '✅ LIMPIO' if 'IPs alias: 0' in final_check.stdout else '⚠️  REVISAR' }}
+
+  handlers:
+    - name: Aplicar netplan
+      ansible.builtin.command:
+        cmd: "netplan apply"
+      async: 30
+      poll: 5
+      changed_when: true

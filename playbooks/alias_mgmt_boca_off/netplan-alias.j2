@@ -1,0 +1,13 @@
+# templates/netplan-alias.j2
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ interface_target }}:
+      # Configuración DHCP existente para red 172.28.222.X
+      dhcp4: true
+      dhcp6: false
+      optional: true
+      # Alias permanente para subred 192.168.A.M
+      addresses:
+        - {{ cidr_alias }}

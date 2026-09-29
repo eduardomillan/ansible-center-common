@@ -1,0 +1,25 @@
+El playbook detecta los siguientes estados:
+
+🟢 Equipo encendido - Responde al ping
+
+🔴 Equipo apagado - No responde al ping
+
+✅ SSH exitoso - Conexión y autenticación correctas
+
+🔐 Error de autenticación - Equipo accesible pero credenciales incorrectas
+
+🚫 Puerto SSH cerrado - Equipo encendido pero servicio SSH no activo
+
+❓ Error desconocido - Otros tipos de errores
+
+
+Cómo usar el playbook:
+
+# Ejecutar con inventory específico
+ansible-playbook -i inventory.ini verify_ssh.yml
+
+# Ejecutar con verbose para más detalles
+ansible-playbook -i inventory.ini verify_ssh.yml -v
+
+# Ejecutar con límite a ciertos equipos
+ansible-playbook -i inventory.ini verify_ssh.yml --limit "grupo_especifico"

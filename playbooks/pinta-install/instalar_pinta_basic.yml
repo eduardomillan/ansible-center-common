@@ -1,0 +1,49 @@
+---
+- name: Instalar Pinta en todos los equipos
+  hosts: all
+  become: true
+  vars:
+    script_pinta: "pinta-latest-install.sh"
+
+  tasks:
+    - name: Comprobar si Pinta ya está instalado
+      ansible.builtin.command: which pinta
+      register: pinta_previo
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Copiar script de instalación a los equipos
+      ansible.builtin.copy:
+        src: "{{ script_pinta }}"
+        dest: /tmp/{{ script_pinta }}
+        mode: "0755"
+        owner: root
+        group: root
+      when: pinta_previo.rc != 0
+
+    - name: Ejecutar script de instalación de Pinta
+      ansible.builtin.command: /tmp/{{ script_pinta }}
+      args:
+        chdir: /tmp
+      register: resultado_instalacion
+      changed_when: resultado_instalacion.rc == 0
+      failed_when: false
+      when: pinta_previo.rc != 0
+
+    - name: Verificar instalación de Pinta
+      ansible.builtin.command: which pinta
+      register: pinta_instalado
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Mostrar resultado de la instalación
+      ansible.builtin.debug:
+        msg: "Pinta instalado correctamente en {{ inventory_hostname }}"
+      when: pinta_instalado.rc == 0
+
+    - name: Mostrar error si la instalación falló
+      ansible.builtin.debug:
+        msg: "Error instalando Pinta en {{ inventory_hostname }}: {{ resultado_instalacion.stderr | default('') }}"
+      when: pinta_instalado.rc != 0

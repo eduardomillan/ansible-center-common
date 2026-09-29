@@ -1,0 +1,87 @@
+---
+# configure_subnet_alias.yml
+- name: Configurar alias de subred permanente en eth0
+  hosts: devices
+  become: true
+  gather_facts: true
+  vars:
+    subred_base: "192.168"
+    subred_mask: "24"
+    interface_target: "eth0"
+
+  tasks:
+    - name: Verificar si id_aula está definido
+      ansible.builtin.set_fact:
+        id_aula_provided: "{{ id_aula is defined and id_aula | string | length > 0 }}"
+
+    - name: Extraer información del hostname
+      ansible.builtin.set_fact:
+        es_profesor: "{{ 'profe' in host_name }}"
+        # Para profesor: extraer el número del hostname (ej: fpb1profe → 1)
+        id_aula_profesor: "{{ host_name | regex_replace('^[a-zA-Z]+', '') | regex_replace('profe$', '') | regex_replace('\\D', '') }}"
+        # Para alumno: extraer número completo (ej: fpb105 → 105)
+        numero_completo: "{{ host_name | regex_replace('^[a-zA-Z]+', '') }}"
+
+    - name: Extraer información del hostname (2)
+      ansible.builtin.set_fact:
+        id_aula_alumno: "{{ (numero_completo | int) // 100 }}"
+        numero_maquina: "{{ (numero_completo | int) % 100 }}"
+
+    - name: Determinar ID de aula final
+      ansible.builtin.set_fact:
+        id_aula_final: "{{ id_aula if id_aula_provided else (id_aula_profesor if es_profesor else id_aula_alumno) }}"
+
+    - name: Determinar número de máquina final
+      ansible.builtin.set_fact:
+        numero_maquina_final: "{{ 250 if es_profesor else numero_maquina }}"
+
+    - name: Determinar ip alias
+      ansible.builtin.set_fact:
+        ip_alias: "{{ subred_base }}.{{ id_aula_final }}.{{ numero_maquina_final }}"
+
+    - name: Determinar CIDR alias
+      ansible.builtin.set_fact:
+        cidr_alias: "{{ ip_alias }}/{{ subred_mask }}"
+
+    - name: Verificar si ya existe un alias 192.168.X.X
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          ip addr show {{ interface_target }} | grep -o '192\.168\.[0-9]\+\.[0-9]\+' || echo 'NO_ALIAS'
+        executable: /bin/bash
+      register: alias_existente
+      changed_when: false
+      check_mode: false
+
+    - name: Mostrar información de configuración
+      ansible.builtin.debug:
+        msg: |
+          Host: {{ host_name }} ({{ inventory_hostname }})
+          Tipo: {{ 'PROFESOR' if es_profesor else 'ALUMNO' }}
+          Aula (A): {{ id_aula_final }}
+          Máquina (M): {{ numero_maquina_final }}
+          IP Alias: {{ cidr_alias }}
+          Alias existente: {{ alias_existente.stdout }}
+
+    # end_host (no end_play): end_play terminaría el play para TODOS los equipos
+    # en cuanto uno solo tuviera ya el alias.
+    - name: Saltar este equipo si ya existe alias 192.168.X.X
+      ansible.builtin.meta: end_host
+      when: alias_existente.stdout != "NO_ALIAS"
+
+    - name: Crear configuración Netplan permanente
+      ansible.builtin.template:
+        src: "netplan-alias.j2"
+        dest: "/etc/netplan/99-subnet-alias-{{ host_name }}.yaml"
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Aplicar netplan
+
+  handlers:
+    - name: Aplicar netplan
+      ansible.builtin.command:
+        cmd: "netplan apply"
+      async: 30
+      poll: 5
+      changed_when: true

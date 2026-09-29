@@ -1,0 +1,50 @@
+---
+- name: Revertir cambios del playbook simplificado de Veyon
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Eliminar override del servicio (si existe)
+      ansible.builtin.file:
+        path: /etc/systemd/system/veyon.service.d/override.conf
+        state: absent
+      notify: Recargar y reiniciar veyon
+
+    # find se ejecuta en el equipo remoto (un lookup('fileglob') miraría
+    # en el equipo de control, no en el remoto).
+    - name: Buscar otros ficheros en el directorio de override
+      ansible.builtin.find:
+        paths: /etc/systemd/system/veyon.service.d
+        hidden: true
+        file_type: any
+      register: override_dir
+
+    - name: Eliminar directorio de override si está vacío
+      ansible.builtin.file:
+        path: /etc/systemd/system/veyon.service.d
+        state: absent
+      when: override_dir.matched == 0
+
+    - name: Eliminar script refresh-veyon-session
+      ansible.builtin.file:
+        path: /usr/local/bin/refresh-veyon-session
+        state: absent
+
+    - name: Eliminar autostart entry
+      ansible.builtin.file:
+        path: /etc/xdg/autostart/refresh-veyon.desktop
+        state: absent
+
+    - name: Asegurar que el servicio Veyon está habilitado y en marcha
+      ansible.builtin.systemd:
+        name: veyon.service
+        state: started
+        enabled: true
+        daemon_reload: true
+
+  handlers:
+    - name: Recargar y reiniciar veyon
+      ansible.builtin.systemd:
+        name: veyon.service
+        daemon_reload: true
+        state: restarted

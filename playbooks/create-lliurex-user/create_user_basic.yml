@@ -1,0 +1,65 @@
+---
+- name: Gestión de usuario Lliurex
+  hosts: all
+  become: true
+  vars_files:
+    - "group_vars.yml"
+
+  pre_tasks:
+    - name: Validar que se proporcionó la contraseña
+      ansible.builtin.fail:
+        msg: "La variable 'user_password' debe estar definida"
+      when: user_password is not defined or user_password == ""
+
+  tasks:
+    - name: Obtener información actual del usuario
+      ansible.builtin.getent:
+        database: passwd
+        key: "{{ user_name }}"
+        fail_key: false
+
+    - name: Recordar si el usuario ya existía
+      ansible.builtin.set_fact:
+        user_existed: "{{ getent_passwd[user_name] is not none }}"
+
+    # La salt se deriva del equipo y del usuario para que el hash sea siempre
+    # el mismo: así el módulo user solo cambia la contraseña si es distinta.
+    # Con una salt aleatoria la cambiaría en cada ejecución.
+    - name: Crear o actualizar usuario
+      ansible.builtin.user:
+        name: "{{ user_name }}"
+        password: "{{ user_password | password_hash('sha512', ((inventory_hostname ~ user_name) | hash('md5'))[:16]) }}"
+        shell: "{{ user_shell }}"
+        groups: "{{ user_groups | join(',') }}"
+        append: true
+        state: "{{ user_state }}"
+        comment: "{{ user_comment }}"
+        create_home: true
+        update_password: "{{ user_update_password }}"
+      register: user_result
+      no_log: true
+      notify: Mostrar resumen de cambios
+
+    - name: Eliminar claves SSH si está configurado
+      ansible.builtin.file:
+        path: "/home/{{ user_name }}/.ssh/authorized_keys"
+        state: absent
+      when:
+        - remove_ssh_keys | bool
+        - user_existed
+
+    - name: Expirar contraseña si está configurado
+      ansible.builtin.command: "chage -d 0 {{ user_name }}"
+      when:
+        - expire_password | bool
+        - user_existed
+      changed_when: true
+
+  handlers:
+    - name: Mostrar resumen de cambios
+      ansible.builtin.debug:
+        msg: |
+          Usuario: {{ user_name }}
+          Estado: {{ 'Actualizado' if user_existed else 'Creado' }}
+          Grupos: {{ user_groups }}
+          Shell: {{ user_shell }}

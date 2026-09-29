@@ -1,0 +1,15 @@
+# templates/netplan-vlan-complete.j2
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ interface_target }}:
+      dhcp4: true
+      dhcp6: false
+      optional: true
+  vlans:
+    {{ vlan_interface }}:
+      id: {{ vlan_id }}
+      link: {{ interface_target }}
+      addresses:
+        - {{ cidr_alias }}

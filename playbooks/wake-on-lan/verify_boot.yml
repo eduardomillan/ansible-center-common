@@ -1,0 +1,44 @@
+---
+- name: Verificación detallada del estado de los equipos
+  hosts: devices
+  gather_facts: true
+  vars:
+    expected_services:
+      - ssh.service
+      - NetworkManager.service
+
+  tasks:
+    # Solo lee el estado: no arranca ni habilita nada.
+    - name: Obtener estado de los servicios
+      ansible.builtin.service_facts:
+
+    - name: Verificar espacio en disco
+      ansible.builtin.command: df --output=pcent /
+      register: disk_usage
+      changed_when: false
+
+    - name: Verificar carga del sistema
+      ansible.builtin.command: awk '{print $1}' /proc/loadavg
+      register: system_load
+      changed_when: false
+
+    - name: Calcular servicios activos
+      ansible.builtin.set_fact:
+        servicios_ok: >-
+          {{ ansible_facts.services | dict2items
+             | selectattr('key', 'in', expected_services)
+             | selectattr('value.state', 'equalto', 'running')
+             | map(attribute='key') | list }}
+
+    - name: Generar reporte de estado
+      ansible.builtin.debug:
+        msg: |
+          === REPORTE {{ inventory_hostname }} ===
+          IP: {{ ansible_default_ipv4.address | default('desconocida') }}
+          Uptime: {{ '%d h %02d min' | format((ansible_uptime_seconds | int) // 3600, ((ansible_uptime_seconds | int) % 3600) // 60) }}
+          Carga del sistema: {{ system_load.stdout }}
+          Uso de disco: {{ disk_usage.stdout_lines[-1] | trim }}
+          Servicios: {{ servicios_ok | length }}/{{ expected_services | length }} OK
+          {% for s in expected_services | difference(servicios_ok) %}
+          ❌ {{ s }} no está activo
+          {% endfor %}

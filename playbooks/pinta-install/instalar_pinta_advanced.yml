@@ -1,0 +1,49 @@
+---
+- name: Instalación masiva de Pinta
+  hosts: all
+  become: true
+  vars:
+    script_instalacion: "pinta-latest-install.sh"
+    temp_dir: "/tmp"
+
+  tasks:
+    - name: Verificar si Pinta ya está instalado
+      ansible.builtin.command: which pinta
+      register: pinta_existente
+      ignore_errors: true
+      changed_when: false
+
+    - name: Saltar equipos con Pinta ya instalado
+      ansible.builtin.meta: end_host
+      when: pinta_existente.rc == 0
+
+    - name: Transferir script de instalación
+      ansible.builtin.copy:
+        src: "{{ script_instalacion }}"
+        dest: "{{ temp_dir }}/{{ script_instalacion }}"
+        mode: "0755"
+        backup: true
+
+    - name: Ejecutar script de instalación
+      ansible.builtin.command: "{{ temp_dir }}/{{ script_instalacion }}"
+      args:
+        chdir: "{{ temp_dir }}"
+      register: instalacion
+      changed_when: true
+      async: 300
+      poll: 15
+
+    - name: Verificar resultado de instalación
+      ansible.builtin.fail:
+        msg: "Falló la instalación en {{ inventory_hostname }}: {{ instalacion.stderr }}"
+      when: instalacion.rc != 0
+
+    - name: Limpiar script temporal
+      ansible.builtin.file:
+        path: "{{ temp_dir }}/{{ script_instalacion }}"
+        state: absent
+      when: instalacion.rc == 0
+
+    - name: Confirmar instalación exitosa
+      ansible.builtin.debug:
+        msg: "✅ Pinta instalado correctamente en {{ inventory_hostname }}"

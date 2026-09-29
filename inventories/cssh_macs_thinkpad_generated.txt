@@ -1,0 +1,9 @@
+# Archivo CSSH generado automáticamente desde MACs
+# Ejemplo de uso: cssh -c archivo_cssh.txt 1bat -l usuario
+
+# 1bat_10_185_97: thinkpad81, thinkpad82, thinkpad83, thinkpad84, thinkpad85, thinkpad86, thinkpad87, thinkpad93
+1bat_10_185_97 10.185.97.{149,155,184,207,255,255,255,255}
+
+# 1bat_10_252_25: thinkpad88, thinkpad89, thinkpad90, thinkpad91, thinkpad92
+1bat_10_252_25 10.252.25.{13,26,47,122,133}
+

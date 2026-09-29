@@ -1,0 +1,46 @@
+---
+- name: Change hostname on devices
+  hosts: devices
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Get current hostname
+      ansible.builtin.command: cat /etc/hostname
+      register: current_hostname
+      changed_when: false
+      check_mode: false
+
+    - name: Display current hostname
+      ansible.builtin.debug:
+        msg: "The current hostname is {{ current_hostname.stdout }}"
+
+    # El módulo hostname cambia el nombre en caliente y en /etc/hostname,
+    # y solo informa de cambios si el nombre es distinto.
+    - name: Change hostname
+      ansible.builtin.hostname:
+        name: "{{ host_name }}"
+        use: systemd
+
+    # Se sustituye solo el nombre completo (\b...\b) y escapando caracteres
+    # especiales, para no tocar nombres que lo contengan (inf31 dentro de inf310).
+    - name: Update hostname in /etc/hosts
+      ansible.builtin.replace:
+        path: /etc/hosts
+        regexp: "\\b{{ current_hostname.stdout | trim | regex_escape }}\\b"
+        replace: "{{ host_name }}"
+      when: current_hostname.stdout | trim != host_name
+
+    - name: Display new hostname
+      ansible.builtin.debug:
+        msg: "The new hostname is {{ host_name }}"
+
+    - name: Display /etc/hosts content
+      ansible.builtin.command: cat /etc/hosts
+      register: etc_hosts_content
+      changed_when: false
+      check_mode: false
+
+    - name: Show /etc/hosts
+      ansible.builtin.debug:
+        msg: "{{ etc_hosts_content.stdout_lines }}"

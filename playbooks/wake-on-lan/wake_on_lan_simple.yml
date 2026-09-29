@@ -1,0 +1,24 @@
+---
+- name: Wake on LAN
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    wol_broadcast: "172.28.222.255" # Cambia por tu broadcast address
+    wol_port: 9
+
+  tasks:
+    - name: Mostrar equipos objetivo
+      ansible.builtin.debug:
+        msg: "Equipos a encender: {{ groups['devices'] | length }}"
+
+    - name: Enviar paquetes Wake-on-LAN
+      community.general.wakeonlan:
+        mac: "{{ hostvars[item].mac_address }}"
+        broadcast: "{{ wol_broadcast }}"
+        port: "{{ wol_port }}"
+      loop: "{{ groups['devices'] }}"
+
+    - name: Esperar a que los equipos estén disponibles
+      ansible.builtin.pause:
+        minutes: 1

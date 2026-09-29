@@ -1,0 +1,54 @@
+---
+- name: Fix Veyon service for session changes
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Create systemd override directory for Veyon
+      ansible.builtin.file:
+        path: /etc/systemd/system/veyon.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create systemd override for Veyon
+      ansible.builtin.blockinfile:
+        path: /etc/systemd/system/veyon.service.d/override.conf
+        create: true
+        mode: "0644"
+        block: |
+          [Service]
+          Restart=on-failure
+          RestartSec=5
+      notify: Restart veyon
+
+    - name: Create session refresh script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/refresh-veyon-session
+        content: |
+          #!/bin/bash
+          sleep 2
+          systemctl try-restart veyon 2>/dev/null || true
+        mode: "0755"
+
+    - name: Create desktop autostart entry
+      ansible.builtin.copy:
+        dest: /etc/xdg/autostart/refresh-veyon.desktop
+        mode: "0644"
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Refresh Veyon
+          Exec=/usr/local/bin/refresh-veyon-session
+          OnlyShowIn=XFCE;GNOME;KDE;
+          NotShowIn=sddm;
+          Hidden=true
+          X-GNOME-Autostart-Delay=5
+
+  handlers:
+    - name: Restart veyon
+      ansible.builtin.systemd:
+        name: veyon.service
+        state: restarted
+        daemon_reload: true

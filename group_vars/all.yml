@@ -1,0 +1,24 @@
+---
+# Global variables for all hosts
+# These variables can be overridden by environment variables or command-line parameters
+
+# Remote user to connect with
+# Can be overridden via: -e "ansible_remote_user=username" or export ANSIBLE_REMOTE_USER="username"
+ansible_remote_user: "{{ lookup('env', 'ANSIBLE_REMOTE_USER') or default('ubuntu', true) }}"
+
+# Admin user (used for user creation and management)
+admin_user: "{{ lookup('env', 'ADMIN_USER') or default('admin', true) }}"
+
+# Home directory (can use environment variable or detect from ansible_env.HOME)
+home_dir: "{{ ansible_env.HOME | default(lookup('env', 'HOME')) }}"
+
+# Include vault secrets (contains shared credentials)
+# Uncomment to include vault in a playbook:
+# vars_files:
+#   - inventories/vault_secrets.yml
+
+# Example of using vault variables:
+# - name: Create user with vault password
+#   user:
+#     name: newuser
+#     password: "{{ default_user_password }}"

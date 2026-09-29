@@ -1,0 +1,16 @@
+---
+- name: Cancelar apagado programado
+  hosts: all
+  become: true
+  tasks:
+    - name: Cancelar apagado programado
+      ansible.builtin.command: shutdown -c
+      register: cancel_result
+      changed_when: cancel_result.rc == 0
+      failed_when: false
+
+    - name: Mostrar mensaje de cancelación
+      ansible.builtin.debug:
+        msg: >-
+          {{ 'Apagado cancelado en ' ~ inventory_hostname if cancel_result.rc == 0
+             else 'No se pudo cancelar en ' ~ inventory_hostname ~ ': ' ~ cancel_result.stderr }}

@@ -1,0 +1,70 @@
+# configure_multiple_ips_nm.yml
+---
+- name: Configurar múltiples IPs en la conexión principal
+  hosts: devices
+  become: true
+  vars:
+    subred_base: "192.168"
+    subred_mask: "24"
+    interface_target: "eth0"
+
+  tasks:
+    - name: Extraer número del hostname
+      ansible.builtin.set_fact:
+        numero_host: "{{ host_name | regex_replace('[^0-9]', '') }}"
+
+    - name: Determinar si es profesor
+      ansible.builtin.set_fact:
+        es_profesor: "{{ 'profe' in host_name }}"
+
+    - name: Calcular ID de aula
+      ansible.builtin.set_fact:
+        id_aula_calculado: "{{ numero_host | int // 100 }}"
+
+    - name: Calcular ID de aula final
+      ansible.builtin.set_fact:
+        id_aula_final: "{{ id_aula | default(id_aula_calculado) }}"
+
+    - name: Calcular número de máquina
+      ansible.builtin.set_fact:
+        numero_maquina: "{{ 250 if es_profesor else (numero_host | int % 100) }}"
+
+    - name: Calcular IP del alias
+      ansible.builtin.set_fact:
+        ip_alias: "{{ subred_base }}.{{ id_aula_final }}.{{ numero_maquina }}"
+
+    - name: Calcular CIDR del alias
+      ansible.builtin.set_fact:
+        cidr_alias: "{{ ip_alias }}/{{ subred_mask }}"
+
+    - name: Obtener nombre de la conexión principal actual
+      ansible.builtin.shell:
+        cmd: "set -o pipefail && nmcli -t -f NAME,DEVICE con show --active | grep ':{{ interface_target }}$' | cut -d: -f1"
+        executable: /bin/bash
+      register: current_connection
+      changed_when: false
+      check_mode: false
+
+    - name: Mostrar información calculada
+      ansible.builtin.debug:
+        msg: |
+          🔧 CONFIGURACIÓN MÚLTIPLES IPs:
+          Host: {{ host_name }}
+          Aula: {{ id_aula_final }}, Máquina: {{ numero_maquina }}
+          IP Alias: {{ cidr_alias }}
+          Conexión principal: {{ current_connection.stdout }}
+
+    - name: Verificar si ya existe la IP adicional
+      ansible.builtin.shell:
+        cmd: "set -o pipefail; ip addr show {{ interface_target }} | grep -F 'inet {{ ip_alias }}/' >/dev/null && echo 'EXISTE' || echo 'NO_EXISTE'"
+        executable: /bin/bash
+      register: ip_check
+      changed_when: false
+      check_mode: false
+
+    - name: Mostrar resultado
+      ansible.builtin.debug:
+        msg: |
+          ✅ CONFIGURACIÓN PARA - {{ host_name }}:
+          IP a añadir: {{ cidr_alias }}
+          Conexión: {{ current_connection.stdout }}

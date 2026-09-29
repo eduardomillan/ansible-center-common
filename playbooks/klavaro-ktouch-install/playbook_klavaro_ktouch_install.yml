@@ -1,0 +1,56 @@
+---
+- name: Instalar y configurar software de mecanografía en Lliurex 23
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    paquetes_principales:
+      - klavaro
+      - ktouch
+
+    paquetes_dependencias:
+      - python3
+      - python3-apt
+
+  tasks:
+    - name: Detectar sistema operativo
+      ansible.builtin.debug:
+        msg: "Sistema detectado: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+    # LliureX 23 está basado en Ubuntu 22.04 (jammy). Solo avisa, no detiene.
+    - name: Advertencia de sistema no compatible
+      ansible.builtin.debug:
+        msg: "ADVERTENCIA: Sistema no compatible (se esperaba LliureX 23 / Ubuntu 22.04). La instalación puede fallar."
+      when: ansible_distribution != "Ubuntu" or ansible_distribution_version != "22.04"
+
+    - name: Actualizar lista de paquetes
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 7200
+
+    - name: Instalar dependencias
+      ansible.builtin.apt:
+        name: "{{ paquetes_dependencias }}"
+        state: present
+
+    - name: Instalar software de mecanografía
+      ansible.builtin.apt:
+        name: "{{ paquetes_principales }}"
+        state: present
+
+    - name: Verificar que los ejecutables están disponibles
+      ansible.builtin.command: which {{ item }}
+      loop: "{{ paquetes_principales }}"
+      register: rutas_ejecutables
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Mostrar información de instalación
+      ansible.builtin.debug:
+        msg: >-
+          {{ item.item }} {{ ('encontrado en: ' ~ item.stdout) if item.rc == 0 else 'NO encontrado' }}
+      loop: "{{ rutas_ejecutables.results }}"
+      loop_control:
+        label: "{{ item.item }}"

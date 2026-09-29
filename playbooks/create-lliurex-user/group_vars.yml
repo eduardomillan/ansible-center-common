@@ -1,0 +1,19 @@
+---
+# Configuración del usuario
+user_name: "lliurex"
+user_shell: "/bin/bash"
+user_groups:
+  - "sudo"
+  - "users"
+  - "adm"
+  - "dip"
+  - "plugdev"
+  - "lpadmin"
+  - "sambashare"
+user_comment: "lliurex"
+user_state: "present"
+user_update_password: "always"
+
+# Configuración de seguridad
+remove_ssh_keys: false
+expire_password: false

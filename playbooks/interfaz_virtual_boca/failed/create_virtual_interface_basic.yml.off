@@ -1,0 +1,54 @@
+# configure_virtual_interface.yml
+---
+- name: Configurar interfaz virtual en eth0
+  hosts: devices
+  become: yes
+  vars:
+    subred_base: "192.168"
+    subred_mask: "24"
+    interface_target: "eth0"
+    es_profesor: false
+
+  tasks:
+    - name: Extraer número del hostname
+      set_fact:
+        numero_host: "{{ host_name | regex_replace('[^0-9]', '') }}"
+        
+    - name: Calcular IP del alias
+      set_fact:
+        es_profesor: "{{ 'profe' in host_name }}"
+        id_aula_calculado: "{{ numero_host | int // 100 }}"
+    - name: Calcular id aula final
+      set_fact:
+        id_aula_final: "{{ id_aula | default(id_aula_calculado) }}"
+        numero_maquina: "{{ 250 if es_profesor else (numero_host | int % 100) }}"
+    - name: Calcular IP alias
+      set_fact:
+        ip_alias: "{{ subred_base }}.{{ id_aula_final }}.{{ numero_maquina }}"
+    - name: Calcular virtual interface
+      set_fact:
+        cidr_alias: "{{ ip_alias }}/{{ subred_mask }}"
+        virtual_interface: "{{ interface_target }}:{{ id_aula_final }}{{ numero_maquina }}"
+        
+    - name: Verificar si ya existe la interfaz virtual
+      ansible.builtin.shell:
+        cmd: "ip addr show | grep -o '{{ virtual_interface }}' || echo 'NO_EXISTE'"
+      register: interface_check
+      changed_when: false
+      
+    - name: Crear configuración Netplan para interfaz virtual
+      ansible.builtin.template:
+        src: "netplan-virtual-interface.j2"
+        dest: "/etc/netplan/99-virtual-interface-{{ host_name }}.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+      when: interface_check.stdout == "NO_EXISTE"
+      notify: aplicar_netplan
+
+  handlers:
+    - name: aplicar_netplan
+      ansible.builtin.command:
+        cmd: "netplan apply"
+      async: 30
+      poll: 5

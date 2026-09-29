@@ -1,0 +1,47 @@
+---
+- name: Reinicio controlado de equipos
+  hosts: all
+  become: true
+  serial: "25%" # Reinicia el 25% de los hosts a la vez
+  vars:
+    reboot_timeout: 600
+    post_reboot_delay: 30
+
+  tasks:
+    - name: Verificar estado del sistema antes del reinicio
+      ansible.builtin.command: uptime
+      register: uptime_result
+      changed_when: false
+
+    - name: Mostrar tiempo de actividad actual
+      ansible.builtin.debug:
+        msg: "Tiempo de actividad: {{ uptime_result.stdout }}"
+
+    - name: Reiniciar sistema
+      ansible.builtin.reboot:
+        msg: "Reinicio programado por Ansible"
+        connect_timeout: 10
+        reboot_timeout: "{{ reboot_timeout }}"
+        pre_reboot_delay: 3
+        post_reboot_delay: "{{ post_reboot_delay }}"
+        test_command: uptime
+
+    - name: Verificar que el sistema está operativo después del reinicio
+      ansible.builtin.wait_for_connection:
+        connect_timeout: 20
+        sleep: 5
+        delay: 5
+        timeout: 300
+
+    - name: Verificar servicios críticos
+      block:
+        - name: Verificar que SSH está funcionando
+          ansible.builtin.wait_for:
+            port: 22
+            host: "{{ ansible_host }}"
+            delay: 5
+            timeout: 60
+      rescue:
+        - name: Registrar error si los servicios no están disponibles
+          ansible.builtin.debug:
+            msg: "Advertencia: El host {{ inventory_hostname }} podría tener problemas después del reinicio"

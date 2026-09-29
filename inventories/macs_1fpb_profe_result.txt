@@ -1,0 +1,20 @@
+VERIFICACIÓN IP POR MAC
+=======================
+
+RED ESCANEADA: 172.28.222.0/24
+
+RESULTADOS DETALLADOS:
+----------------------
+❌ 00:E0:4C:04:E5:90 -> 172.28.222.224 fpb1profe (NO ENCONTRADO)
+
+RESUMEN:
+--------
+Red escaneada: 172.28.222.0/24
+IPs correctas: 0
+IPs incorrectas: 0
+Equipos no encontrados: 1
+Total verificados: 1
+
+DATOS ACTUALIZADOS (MAC | IP_ACTUAL | HOST):
+---------------------------------------------
+00:E0:4C:04:E5:90 172.28.222.224 fpb1profe

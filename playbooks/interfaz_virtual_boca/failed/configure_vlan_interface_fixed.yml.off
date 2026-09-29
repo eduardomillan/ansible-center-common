@@ -1,0 +1,82 @@
+# configure_vlan_interface_fixed.yml
+---
+- name: Configurar interfaz VLAN para subred
+  hosts: devices
+  become: yes
+  vars:
+    subred_base: "192.168"
+    subred_mask: "24"
+    interface_target: "eth0"
+
+  tasks:
+    - name: Extraer número del hostname
+      set_fact:
+        numero_host: "{{ host_name | regex_replace('[^0-9]', '') }}"
+        
+    - name: Determinar si es profesor
+      set_fact:
+        es_profesor: "{{ 'profe' in host_name }}"
+        
+    - name: Calcular ID de aula
+      set_fact:
+        id_aula_calculado: "{{ numero_host | int // 100 }}"
+        id_aula_final: "{{ id_aula | default(id_aula_calculado) }}"
+        
+    - name: Calcular número de máquina
+      set_fact:
+        numero_maquina: "{{ 250 if es_profesor else (numero_host | int % 100) }}"
+        
+    - name: Calcular IP del alias
+      set_fact:
+        ip_alias: "{{ subred_base }}.{{ id_aula_final }}.{{ numero_maquina }}"
+
+    - name: Calcular CIDR del alias
+      set_fact:
+        cidr_alias: "{{ ip_alias }}/{{ subred_mask }}"
+        
+    - name: Calcular configuración VLAN
+      set_fact:
+        vlan_id: "{{ id_aula_final | int + 100 }}"
+
+    - name: Calcular configuración VLAN (2)
+      set_fact:
+        vlan_interface: "{{ interface_target }}.{{ vlan_id }}"
+        
+    - name: Mostrar información calculada
+      debug:
+        msg: |
+          🔧 CONFIGURACIÓN VLAN CALCULADA:
+          Host: {{ host_name }}
+          Número: {{ numero_host }}
+          Aula: {{ id_aula_final }}
+          Máquina: {{ numero_maquina }} {{ '(PROFESOR)' if es_profesor else '(ALUMNO)' }}
+          IP Alias: {{ cidr_alias }}
+          VLAN ID: {{ vlan_id }}
+          Interfaz VLAN: {{ vlan_interface }}
+        
+    - name: Verificar si ya existe la VLAN
+      ansible.builtin.shell:
+        cmd: "ip addr show | grep '{{ vlan_interface }}' && echo 'EXISTE' || echo 'NO_EXISTE'"
+      register: vlan_check
+      changed_when: false
+      
+    - name: Mostrar resultado de verificación
+      debug:
+        msg: "Estado VLAN {{ vlan_interface }}: {{ vlan_check.stdout }}"
+        
+    - name: Crear configuración Netplan completa para VLAN
+      ansible.builtin.template:
+        src: "netplan-vlan-complete.j2"
+        dest: "/etc/netplan/99-vlan-{{ host_name }}.yaml"
+        owner: root
+        group: root
+        mode: '0644'
+      when: vlan_check.stdout == "NO_EXISTE"
+      notify: aplicar_netplan
+
+  handlers:
+    - name: aplicar_netplan
+      ansible.builtin.command:
+        cmd: "netplan apply"
+      async: 30
+      poll: 5

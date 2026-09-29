@@ -1,0 +1,1 @@
+ansible-playbook -i inventory_1fpb_alu.ini verify_alias_config.yml

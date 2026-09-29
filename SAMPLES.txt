@@ -1,0 +1,82 @@
+###########################################################
+# Archivo para /bin/bash
+#
+# Ejemplos de uso de "ansible-playbook"
+#
+###########################################################
+USO RÁPIDO
+
+La forma más sencilla es colocar el "inventory.ini", el "ansible.cfg" y
+el "playbook.yml" en la ruta base, o bien hacer referencia al playbook.yml
+correspondiente en la carpeta adecuada (si tiene dependencias de otros
+archivos).
+
+El nombre del inventory "inventory.ini" suele configurarse en el "ansible.cfg".
+
+# EJEMPLO AVANZADO: Combinación múltiple
+ansible-playbook -i inventory.ini deploy.yml --limit "web_servers" --tags "apache,ssl" -u deploy_user -b --forks 5 -vv
+
+###########################################################
+
+
+# EJEMPLO 1: Especificar inventario personalizado
+ansible-playbook -i hosts_prod.yml playbook.yml
+
+# EJEMPLO 2: Limitar ejecución a hosts específicos
+ansible-playbook playbook.yml --limit "webservers,dbservers"
+
+# EJEMPLO 3: Ejecutar con tags específicos
+ansible-playbook playbook.yml --tags "deploy,config"
+
+# EJEMPLO 4: Saltar tags específicos
+ansible-playbook playbook.yml --skip-tags "reboot,maintenance"
+
+# EJEMPLO 5: Ejecutar con modo verbose (detallado)
+ansible-playbook playbook.yml -vvv
+
+# EJEMPLO 6: Ejecutar con check mode (simulación)
+ansible-playbook playbook.yml --check --diff
+
+# EJEMPLO 7: Especificar usuario remoto
+ansible-playbook playbook.yml -u admin --ask-pass
+
+# EJEMPLO 8: Ejecutar con elevación de privilegios (sudo)
+ansible-playbook playbook.yml -b --become-user=root --ask-become-pass
+
+# EJEMPLO 9: Controlar concurrencia con forks
+ansible-playbook playbook.yml --forks 15
+
+# EJEMPLO 10: Ejecutar tareas específicas por nombre
+ansible-playbook playbook.yml --start-at-task "Install packages"
+
+# EJEMPLO 11: Autenticación con usuario y contraseña
+ansible-playbook playbook.yml --user mi_usuario --ask-pass
+
+# Pide la contraseña SSH interactivamente
+ansible-playbook playbook.yml --ask-pass
+
+# Especifica usuario y pide su contraseña SSH
+ansible-playbook playbook.yml --user mi_usuario --ask-pass
+
+# Pide contraseña para sudo/become
+ansible-playbook playbook.yml -b --ask-become-pass
+
+# Usuario específico, pide contraseña SSH y contraseña de sudo
+ansible-playbook playbook.yml --user mi_usuario --ask-pass -b --ask-become-pass
+
+# Usar archivo con contraseñas (¡Cuidado con los permisos!)
+ansible-playbook playbook.yml --user mi_usuario --extra-vars "ansible_ssh_pass=mi_password"
+
+# IMPORTANTE:
+# Considera usar ansible-vault para contraseñas almacenadas
+
+
+# Capturar el código de salida
+EXIT_CODE=$?
+
+# Limpiar la variable de entorno
+unset ANSIBLE_CONFIG
+
+echo ""
+echo "✅ Ejecución completada (Código: $EXIT_CODE)"
+exit $EXIT_CODE

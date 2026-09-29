@@ -1,0 +1,6 @@
+# Archivo CSSH generado automáticamente desde MACs
+# Ejemplo de uso: cssh -c archivo_cssh.txt inf1alu -l usuario
+
+# inf1alu: inf111, inf112, inf113, inf114, inf115, inf116, inf121, inf122, inf123, inf124, inf125, inf126, inf131, inf132, inf133, inf134, inf135, inf136
+inf1alu 192.168.1.{11,12,13,14,15,16,21,22,23,24,25,26,31,32,33,34,35,36}
+

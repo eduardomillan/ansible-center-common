@@ -1,0 +1,10 @@
+# templates/netplan-vlan.j2
+network:
+  version: 2
+  renderer: networkd
+  vlans:
+    {{ vlan_interface }}:
+      id: {{ vlan_id }}
+      link: {{ interface_target }}
+      addresses:
+        - {{ cidr_alias }}

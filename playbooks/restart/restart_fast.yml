@@ -1,0 +1,18 @@
+---
+- name: Reinicio controlado de equipos
+  hosts: all
+  become: true
+  serial: "100%" # Reinicia el % de los hosts a la vez
+  vars:
+    reboot_timeout: 5
+    post_reboot_delay: 5
+
+  tasks:
+    - name: Reiniciar sistema
+      ansible.builtin.reboot:
+        msg: "Reinicio programado por Ansible"
+        connect_timeout: 10
+        reboot_timeout: "{{ reboot_timeout }}"
+        pre_reboot_delay: 3
+        post_reboot_delay: "{{ post_reboot_delay }}"
+        test_command: uptime

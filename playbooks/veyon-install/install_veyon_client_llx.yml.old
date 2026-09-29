@@ -1,0 +1,75 @@
+---
+- name: Instalar Veyon Client en equipos Lliurex 23
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    veyon_version: "4.8.2"  # Puedes ajustar la versión según necesites
+
+  tasks:
+    - name: Verificar que el sistema es Lliurex 23
+      fail:
+        msg: "Este playbook solo es compatible con Lliurex 23"
+      when: ansible_distribution != "Ubuntu" or ansible_distribution_version != "22.04"  # Lliurex 23 está basado en Ubuntu 22.04
+
+    - name: Actualizar caché de paquetes
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Instalar dependencias necesarias
+      apt:
+        name:
+          - wget
+          - gnupg
+          - software-properties-common
+        state: present
+
+    - name: Añadir repositorio de Veyon
+      apt_repository:
+        repo: "deb https://repo.veyon.io/ stable main"
+        state: present
+        filename: veyon
+
+    - name: Importar clave GPG de Veyon
+      apt_key:
+        url: https://repo.veyon.io/stable/veyon.gpg
+        state: present
+
+    - name: Actualizar caché después de añadir repositorio
+      apt:
+        update_cache: yes
+
+    - name: Instalar Veyon Client
+      apt:
+        name: veyon-client
+        state: present
+        update_cache: yes
+
+    - name: Verificar instalación de Veyon Client
+      command: veyon-cli --version
+      register: veyon_version_check
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Mostrar versión instalada de Veyon
+      debug:
+        msg: "Veyon Client instalado correctamente - {{ veyon_version_check.stdout }}"
+      when: veyon_version_check.rc == 0
+
+    - name: Verificar que el servicio Veyon está activo
+      systemd:
+        name: veyon
+        enabled: yes
+        state: started
+
+    - name: Comprobar estado del servicio Veyon
+      systemd:
+        name: veyon
+        state: started
+      register: veyon_service_status
+
+    - name: Mostrar estado del servicio
+      debug:
+        msg: "Servicio Veyon está {{ 'activo' if veyon_service_status else 'inactivo' }}"

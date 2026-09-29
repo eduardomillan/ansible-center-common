@@ -1,0 +1,27 @@
+---
+- name: Verificar instalación de Veyon
+  hosts: all
+  become: true
+  vars:
+    veyon_paquetes:
+      - veyon-service
+      - veyon-plugins
+      - veyon-configurator
+
+  tasks:
+    # Solo lectura: no instala ni arranca nada.
+    - name: Obtener paquetes instalados
+      ansible.builtin.package_facts:
+
+    - name: Obtener estado de los servicios
+      ansible.builtin.service_facts:
+
+    - name: Mostrar resumen
+      ansible.builtin.debug:
+        msg: |
+          Paquetes Veyon: {{ veyon_paquetes | select('in', ansible_facts.packages) | list | length }}/{{ veyon_paquetes | length }} instalados
+          {% for p in veyon_paquetes | reject('in', ansible_facts.packages) %}
+          ❌ Falta el paquete {{ p }}
+          {% endfor %}
+          Servicio veyon: {{ ansible_facts.services['veyon.service'].state | default('no existe') }}
+          Arranque automático: {{ ansible_facts.services['veyon.service'].status | default('no existe') }}

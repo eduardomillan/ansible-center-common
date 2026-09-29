@@ -1,0 +1,53 @@
+# simulate_subnet_alias_fixed.yml
+---
+- name: Simular creación de alias de subred
+  hosts: devices
+  become: true
+  vars:
+    subred_base: "192.168"
+    subred_mask: "24"
+    interface_target: "eth0"
+
+  tasks:
+    - name: Extraer número del hostname
+      ansible.builtin.set_fact:
+        numero_host: "{{ host_name | regex_replace('[^0-9]', '') }}"
+
+    - name: Determinar si es profesor
+      ansible.builtin.set_fact:
+        es_profesor: "{{ 'profe' in host_name }}"
+
+    - name: Calcular ID de aula
+      ansible.builtin.set_fact:
+        id_aula: "{{ id_aula | default(numero_host | int // 100) }}"
+
+    - name: Calcular número de máquina
+      ansible.builtin.set_fact:
+        numero_maquina: "{{ 250 if es_profesor else (numero_host | int % 100) }}"
+
+    - name: Calcular IP del alias
+      ansible.builtin.set_fact:
+        ip_alias: "{{ subred_base }}.{{ id_aula }}.{{ numero_maquina }}"
+
+    - name: Calcular el CIDR del alias
+      ansible.builtin.set_fact:
+        cidr_alias: "{{ ip_alias }}/{{ subred_mask }}"
+
+    - name: Verificar alias existente
+      ansible.builtin.shell:
+        cmd: "set -o pipefail; ip addr show {{ interface_target }} 2>/dev/null | grep '192\\.168\\.' >/dev/null"
+        executable: /bin/bash
+      register: alias_check
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Mostrar resumen
+      ansible.builtin.debug:
+        msg: |
+          🔧 CONFIGURACIÓN SIMULADA:
+          Host: {{ host_name }} Número: {{ numero_host }}
+          Aula: {{ id_aula }}, Máquina: {{ numero_maquina }}
+          IP Alias: {{ cidr_alias }}  Tipo: {{ 'PROFESOR' if es_profesor else 'ALUMNO' }}
+          Alias existente: {{ 'SÍ' if alias_check.rc == 0 else 'NO' }}
+          Acción: {{ 'NO hacer nada (alias existe)' if alias_check.rc == 0 else 'CREAR alias' }}

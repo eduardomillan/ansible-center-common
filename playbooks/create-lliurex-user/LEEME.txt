@@ -1,0 +1,10 @@
+# Con contraseña por línea de comandos (recomendado)
+ansible-playbook -i ../../inventories/inventory_inf3.ini create_user_basic.yml -e "user_password=lliurex" -u me.millan -b -k --forks 20
+
+# Con grupos personalizados
+ansible-playbook -i inventory playbook.yml \
+  -e "user_password=MiContraseñaSegura123!" \
+  -e "user_groups=['sudo','users','adm']"
+
+# Solo con valores por defecto (NO recomendado para producción)
+ansible-playbook -i inventory playbook.yml

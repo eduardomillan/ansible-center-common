@@ -1,0 +1,21 @@
+1. Cálculos previos
+
+Número del host: 135 (extraído de inf135).
+ID de aula: 135 // 100 = 1.
+Número de máquina: 135 % 100 = 35 (no es profesor).
+IP alias: 192.168.1.35.
+CIDR alias: 192.168.1.35/24.
+
+2. Comandos nmcli ejecutados
+Primero se obtiene la conexión activa para eth0:
+
+nmcli -t -f NAME,DEVICE con show --active | grep ':eth0$' | cut -d: -f1
+
+Supongamos que devuelve Conexión_Aula1.
+
+Luego, si la IP no existe, se añaden los comandos:
+
+sudo export CONN_NAME="eth0"
+
+sudo nmcli con mod "$CONN_NAME" +ipv4.addresses "192.168.2.250/24"
+sudo nmcli con down "$CONN_NAME" && sudo nmcli con up "$CONN_NAME"

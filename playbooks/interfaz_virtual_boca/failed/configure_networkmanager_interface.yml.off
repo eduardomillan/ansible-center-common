@@ -1,0 +1,69 @@
+# configure_networkmanager_interface.yml
+---
+- name: Configurar interfaz adicional con NetworkManager
+  hosts: devices
+  become: yes
+  vars:
+    subred_base: "192.168"
+    subred_mask: "24"
+    interface_target: "eth0"
+
+  tasks:
+    - name: Extraer número del hostname
+      set_fact:
+        numero_host: "{{ host_name | regex_replace('[^0-9]', '') }}"
+        
+    - name: Determinar si es profesor
+      set_fact:
+        es_profesor: "{{ 'profe' in host_name }}"
+        
+    - name: Calcular ID de aula
+      set_fact:
+        id_aula_calculado: "{{ numero_host | int // 100 }}"
+        id_aula_final: "{{ id_aula | default(id_aula_calculado) }}"
+        
+    - name: Calcular número de máquina
+      set_fact:
+        numero_maquina: "{{ 250 if es_profesor else (numero_host | int % 100) }}"
+        
+    - name: Calcular IP del alias
+      set_fact:
+        ip_alias: "{{ subred_base }}.{{ id_aula_final }}.{{ numero_maquina }}"
+
+    - name: Calcular CIDR del alias
+      set_fact:
+        cidr_alias: "{{ ip_alias }}/{{ subred_mask }}"
+        connection_name: "subred-aula-{{ id_aula_final }}"
+        
+    - name: Mostrar información calculada
+      debug:
+        msg: |
+          🔧 CONFIGURACIÓN NETWORKMANAGER:
+          Host: {{ host_name }}
+          Número: {{ numero_host }}
+          Aula: {{ id_aula_final }}
+          Máquina: {{ numero_maquina }} {{ '(PROFESOR)' if es_profesor else 'ALUMNO' }}
+          IP Alias: {{ cidr_alias }}
+          Conexión: {{ connection_name }}
+        
+    - name: Verificar si ya existe la conexión
+      ansible.builtin.shell:
+        cmd: "nmcli con show | grep '{{ connection_name }}' && echo 'EXISTE' || echo 'NO_EXISTE'"
+      register: nm_check
+      changed_when: false
+      
+    - name: Mostrar resultado de verificación
+      debug:
+        msg: "Estado conexión {{ connection_name }}: {{ nm_check.stdout }}"
+      
+    - name: Crear y activar conexión NetworkManager
+      community.general.nmcli:
+        conn_name: "{{ connection_name }}"
+        ifname: "{{ interface_target }}"
+        type: ethernet
+        ip4: "{{ cidr_alias }}"
+        gw4: ""  # Sin gateway para subred aislada
+        autoconnect: yes  # Se conecta automáticamente
+        state: present
+      when: nm_check.stdout == "NO_EXISTE"
+      register: nm_creation

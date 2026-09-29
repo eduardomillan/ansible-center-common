@@ -1,0 +1,77 @@
+---
+- name: Verificación de conectividad SSH de los equipos
+  hosts: all
+  gather_facts: false
+  vars:
+    mensajes_estado:
+      OK: "✅ CONEXIÓN SSH EXITOSA"
+      AUTH: "🔐 ERROR DE AUTENTICACIÓN SSH (credenciales incorrectas)"
+      PUERTO: "🚫 PUERTO SSH CERRADO o SERVICIO NO ACTIVO"
+      APAGADO: "🔴 EQUIPO APAGADO (no responde al ping)"
+      ERROR: "❓ ERROR DESCONOCIDO en SSH"
+
+  tasks:
+    - name: Verificar si el equipo está encendido (ping ICMP desde el controlador)
+      ansible.builtin.command: ping -c 1 -W 2 {{ ansible_host | default(inventory_hostname) }}
+      delegate_to: localhost
+      become: false
+      register: icmp_result
+      changed_when: false
+      failed_when: false
+
+    # ignore_unreachable mantiene en el play a los equipos inaccesibles
+    # para poder clasificarlos y mostrarlos en el resumen.
+    - name: Verificar conectividad SSH
+      ansible.builtin.ping:
+      register: ssh_result
+      ignore_unreachable: true
+      failed_when: false
+
+    # Cada tarea sobrescribe a la anterior: la última que se cumpla gana.
+    - name: Estado por defecto (error desconocido)
+      ansible.builtin.set_fact:
+        estado_equipo: ERROR
+
+    - name: Estado apagado (no responde al ping ICMP)
+      ansible.builtin.set_fact:
+        estado_equipo: APAGADO
+      when: icmp_result.rc != 0
+
+    - name: Estado puerto SSH cerrado
+      ansible.builtin.set_fact:
+        estado_equipo: PUERTO
+      when: "'Connection refused' in ssh_result.msg | default('')"
+
+    - name: Estado error de autenticación
+      ansible.builtin.set_fact:
+        estado_equipo: AUTH
+      when: "'Permission denied' in ssh_result.msg | default('') or 'Authentication failed' in ssh_result.msg | default('')"
+
+    - name: Estado SSH correcto
+      ansible.builtin.set_fact:
+        estado_equipo: OK
+      when: ssh_result.ping | default('') == 'pong'
+
+    - name: Obtener sistema operativo
+      ansible.builtin.setup:
+        gather_subset: min
+      when: estado_equipo == 'OK'
+
+    - name: Mostrar estado del equipo
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} - {{ mensajes_estado[estado_equipo] }}
+          {{ ('- OS: ' ~ ansible_distribution ~ ' ' ~ ansible_distribution_version) if estado_equipo == 'OK' else '' }}
+          {{ ssh_result.msg | default('') if estado_equipo == 'ERROR' else '' }}
+
+    - name: Resumen por categorías
+      ansible.builtin.debug:
+        msg:
+          - "📊 RESUMEN: {{ ansible_play_hosts_all | length }} equipos en inventory"
+          - "🟢 Encendidos (responden al ping): {{ estados | reject('equalto', 'APAGADO') | list | length }}"
+          - "🔴 Apagados: {{ estados | select('equalto', 'APAGADO') | list | length }}"
+          - "🏆 EQUIPOS CON SSH FUNCIONAL: {{ ok_hosts | join(', ') }}"
+      vars:
+        estados: "{{ ansible_play_hosts_all | map('extract', hostvars, 'estado_equipo') | list }}"
+        ok_hosts: "{{ ansible_play_hosts_all | zip(estados) | selectattr('1', 'equalto', 'OK') | map('first') | list }}"
+      run_once: true

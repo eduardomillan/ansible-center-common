@@ -1,0 +1,44 @@
+---
+- name: Instalar UnityHub en Lliurex 23
+  hosts: all
+  become: true
+  vars:
+    unity_key_path: /usr/share/keyrings/Unity_Technologies_ApS.asc
+
+  tasks:
+    # apt acepta claves en formato ASCII (.asc) en "signed-by", así que no hace
+    # falta "gpg --dearmor". get_url solo descarga si la clave no existe.
+    - name: Descargar clave GPG de Unity
+      ansible.builtin.get_url:
+        url: https://hub.unity3d.com/linux/keys/public
+        dest: "{{ unity_key_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: unity_key
+
+    - name: Crear archivo de repositorio de Unity Hub
+      ansible.builtin.copy:
+        content: "deb [signed-by={{ unity_key_path }}] https://hub.unity3d.com/linux/repos/deb stable main\n"
+        dest: /etc/apt/sources.list.d/unityhub.list
+        owner: root
+        group: root
+        mode: "0644"
+      register: unity_repo
+
+    - name: Actualizar cache de paquetes si ha cambiado el repositorio
+      ansible.builtin.apt:
+        update_cache: true
+      when: unity_key.changed or unity_repo.changed
+
+    - name: Instalar UnityHub
+      ansible.builtin.apt:
+        name: unityhub
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Eliminar la clave antigua en formato binario (ya no se usa)
+      ansible.builtin.file:
+        path: /usr/share/keyrings/Unity_Technologies_ApS.gpg
+        state: absent

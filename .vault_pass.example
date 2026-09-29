@@ -1,0 +1,15 @@
+#!/bin/bash
+# LOCAL FILE - NOT VERSIONED
+# This file should contain the password/passphrase for Ansible Vault
+
+# How to use:
+# 1. Copy this file: cp .vault_pass.example .vault_pass
+# 2. Edit .vault_pass and enter your vault password (single line, no newline needed if using stdin)
+# 3. Ensure .vault_pass has correct permissions: chmod 600 .vault_pass
+# 4. Use in commands with: ansible-playbook playbook.yml --vault-password-file=.vault_pass
+
+# Alternative: Use environment variable
+# export ANSIBLE_VAULT_PASSWORD_FILE=".vault_pass"
+
+# For interactive password input (no file needed):
+# ansible-playbook playbook.yml --ask-vault-pass

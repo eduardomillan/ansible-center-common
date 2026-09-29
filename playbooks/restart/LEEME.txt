@@ -1,0 +1,14 @@
+# Ejecutar playbook básico
+ansible-playbook -i inventory restart.yml
+
+# Ejecutar con límite a ciertos hosts
+ansible-playbook -i inventory restart.yml --limit "webservers"
+
+# Ejecutar en modo verbose para más detalles
+ansible-playbook -i inventory restart.yml -v
+
+# Ejecutar con tags específicos
+ansible-playbook -i inventory restart.yml --tags "reboot"
+
+# Ejecutar con check mode (sin hacer cambios reales)
+ansible-playbook -i inventory restart.yml --check

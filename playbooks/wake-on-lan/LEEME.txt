@@ -1,0 +1,66 @@
+PLAYBOOK DE EJECUCIÓN DEL "wake-on-lan"
+
+Requisitos previos:
+
+- Los equipos objetivo deben tener Wake-on-LAN habilitado en BIOS y en el sistema operativo
+- Configuración de red adecuada para broadcast
+- Acceso SSH a los equipos (claves SSH o contraseñas)
+- Ansible instalado en la máquina controladora
+
+
+Características del script:
+
+✅ Envía paquetes Wake-on-LAN a todos los equipos del inventory
+✅ Espera y verifica el arranque mediante conexión SSH
+✅ Muestra información detallada de los equipos encendidos
+✅ Manejo de reintentos y timeouts configurables
+✅ Reporte final del estado de todos los equipos
+✅ Verificación opcional de servicios y estado del sistema
+
+
+
+Preparación del entorno:
+
+bash
+# Instalar Ansible si no está instalado
+sudo apt update && sudo apt install ansible -y  # Ubuntu/Debian
+
+# Clonar o crear la estructura de archivos
+mkdir wol_playbook && cd wol_playbook
+Configurar el inventory:
+
+Edita inventory.ini con las direcciones MAC e IP de tus equipos
+
+Ajusta las credenciales de conexión SSH
+
+######################################################################
+
+Script de ejecución (opcional)
+run_wol.sh
+
+bash
+#!/bin/bash
+
+# Instalar dependencias si es necesario
+echo "Instalando dependencias..."
+ansible-galaxy collection install -r requirements.yml
+
+# Ejecutar Wake-on-LAN
+echo "Ejecutando Wake-on-LAN..."
+ansible-playbook -i inventory.ini wake_on_lan.yml
+
+# Verificación detallada (opcional)
+echo "Realizando verificación detallada..."
+ansible-playbook -i inventory.ini verify_boot.yml
+
+######################################################################
+
+
+Ejecutar el playbook:
+
+bash
+# Ejecución básica
+ansible-playbook -i inventory.ini wake_on_lan.yml
+
+# Con verificación detallada
+ansible-playbook -i inventory.ini wake_on_lan.yml && ansible-playbook -i inventory.ini verify_boot.yml

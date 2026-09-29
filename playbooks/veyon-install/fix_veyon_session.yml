@@ -1,0 +1,170 @@
+---
+- name: Corregir problema de sesión Veyon en LliureX 23
+  hosts: all
+  become: true
+  vars:
+    veyon_service: "veyon.service"
+
+  tasks:
+    - name: Verificar que Veyon está instalado
+      ansible.builtin.stat:
+        path: /usr/lib/systemd/system/{{ veyon_service }}
+      register: veyon_installed
+
+    - name: Aplicar corrección de sesión Veyon
+      when: veyon_installed.stat.exists
+      block:
+        - name: Crear directorio para override de systemd
+          ansible.builtin.file:
+            path: /etc/systemd/system/{{ veyon_service }}.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        # Override mínimo: solo reinicio automático si el servicio cae.
+        # No se usa BindsTo=graphical-session.target (es un target de la sesión
+        # de usuario, no existe para servicios de sistema), ni Type=notify
+        # (veyon-service no avisa a systemd), ni User=veyon (el servicio
+        # necesita ejecutarse como root para lanzar el servidor en cada sesión).
+        - name: Crear configuración override para Veyon
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/{{ veyon_service }}.d/override.conf
+            content: |
+              [Service]
+              Restart=on-failure
+              RestartSec=5
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Reiniciar veyon
+
+        - name: Crear script de recarga automática de configuración
+          ansible.builtin.copy:
+            dest: /usr/local/bin/veyon-session-refresh
+            content: |
+              #!/bin/bash
+              # Script para recargar configuración de Veyon al cambiar de sesión
+
+              # Esperar a que esté disponible la sesión
+              MAX_RETRIES=10
+              RETRY_DELAY=1
+
+              for i in $(seq 1 $MAX_RETRIES); do
+                  # Verificar si hay sesión gráfica activa
+                  if [ -n "$DISPLAY" ] && [ -S "/run/user/$(id -u)/bus" ]; then
+                      # Recargar configuración via DBus
+                      if command -v dbus-send >/dev/null 2>&1; then
+                          dbus-send --system --dest=com.veyon.Service \
+                              --type=method_call --print-reply /com/veyon/Service \
+                              com.veyon.Service.ReloadConfiguration 2>/dev/null && break
+                      fi
+
+                      # Alternativa: usar veyon-cli
+                      /usr/bin/veyon-cli config reload 2>/dev/null && break
+                  fi
+                  sleep $RETRY_DELAY
+              done
+
+              # Forzar recarga del servicio si lo anterior falla
+              systemctl kill -s HUP {{ veyon_service }} 2>/dev/null || true
+            mode: "0755"
+
+        - name: Configurar autostart para usuarios
+          ansible.builtin.copy:
+            dest: /etc/xdg/autostart/veyon-session.desktop
+            content: |
+              [Desktop Entry]
+              Type=Application
+              Name=Veyon Session Sync
+              Exec=/bin/bash -c 'sleep 3 && systemctl --user start veyon-session-watcher.service 2>/dev/null || true'
+              OnlyShowIn=XFCE;GNOME;KDE;MATE;LXDE;
+              NotShowIn=sddm-greeter;
+              X-GNOME-Autostart-Delay=5
+              NoDisplay=true
+              Hidden=false
+            mode: "0644"
+
+        - name: Crear servicio de usuario para session watcher
+          ansible.builtin.copy:
+            dest: /etc/xdg/systemd/user/veyon-session-watcher.service
+            content: |
+              [Unit]
+              Description=Veyon User Session Watcher
+              After=graphical-session.target
+              Requires=graphical-session.target
+
+              [Service]
+              Type=oneshot
+              ExecStart=/usr/local/bin/veyon-session-refresh
+              RemainAfterExit=yes
+
+              [Install]
+              WantedBy=default.target
+            mode: "0644"
+
+        - name: Crear script de setup automático para usuarios
+          ansible.builtin.copy:
+            dest: /etc/profile.d/veyon-session-setup.sh
+            content: |
+              #!/bin/bash
+              # Configuración automática de Veyon para nuevas sesiones
+
+              # Solo ejecutar en sesiones gráficas
+              if [ -n "$DISPLAY" ] && [ "$XDG_SESSION_DESKTOP" != "" ]; then
+                  # Crear directorio de systemd de usuario si no existe
+                  USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
+                  mkdir -p "$USER_SYSTEMD_DIR"
+
+                  # Copiar servicio si no existe
+                  if [ ! -f "$USER_SYSTEMD_DIR/veyon-session-watcher.service" ]; then
+                      cp /etc/xdg/systemd/user/veyon-session-watcher.service "$USER_SYSTEMD_DIR/"
+                      systemctl --user daemon-reload 2>/dev/null
+                      systemctl --user enable veyon-session-watcher.service 2>/dev/null
+                      systemctl --user start veyon-session-watcher.service 2>/dev/null
+                  fi
+
+                  # Forzar recarga inicial
+                  sleep 2
+                  /usr/local/bin/veyon-session-refresh &
+              fi
+            mode: "0755"
+
+        # Limpieza de lo que instalaban versiones anteriores de este playbook.
+        - name: Comprobar si existe el watcher de sistema anterior
+          ansible.builtin.stat:
+            path: /etc/systemd/system/veyon-session-watcher.service
+          register: watcher_sistema
+
+        - name: Deshabilitar el watcher de sistema anterior
+          ansible.builtin.systemd:
+            name: veyon-session-watcher.service
+            enabled: false
+          when: watcher_sistema.stat.exists
+
+        # Dependía de graphical-session.target en el ámbito de sistema, así que
+        # no podía arrancar. El watcher de usuario (/etc/xdg/systemd/user) se mantiene.
+        - name: Eliminar el watcher de sistema anterior
+          ansible.builtin.file:
+            path: /etc/systemd/system/veyon-session-watcher.service
+            state: absent
+          notify: Recargar systemd
+
+        # La regla anterior permitía a cualquier usuario gestionar cualquier
+        # unidad systemd (arrancar/parar servicios del sistema).
+        - name: Eliminar regla PolicyKit insegura anterior
+          ansible.builtin.file:
+            path: /etc/polkit-1/localauthority/50-local.d/veyon-session.pkla
+            state: absent
+
+  handlers:
+    - name: Recargar systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Reiniciar veyon
+      ansible.builtin.systemd:
+        name: "{{ veyon_service }}"
+        state: restarted
+        enabled: true
+        daemon_reload: true

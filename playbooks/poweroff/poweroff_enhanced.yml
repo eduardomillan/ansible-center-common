@@ -1,0 +1,27 @@
+---
+- name: Apagar equipos de forma controlada
+  hosts: all
+  become: true
+  vars:
+    shutdown_delay: 1
+    shutdown_message: "Apagado iniciado por Ansible"
+
+  tasks:
+    # "shutdown +N" solo programa el apagado y vuelve enseguida,
+    # así que no hace falta lanzarlo en segundo plano.
+    - name: Apagar sistema con mensaje y delay
+      ansible.builtin.command: shutdown -h +{{ shutdown_delay }} "{{ shutdown_message }}"
+      changed_when: true
+
+    - name: Registrar apagado
+      ansible.builtin.debug:
+        msg: "El equipo {{ inventory_hostname }} se apagará en {{ shutdown_delay }} minutos"
+
+    - name: Verificar que el equipo se apaga
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: 22
+        state: stopped
+        timeout: 400
+      delegate_to: localhost
+      become: false

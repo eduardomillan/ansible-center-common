@@ -1,0 +1,38 @@
+# Uso rápido
+ansible-playbook -i inventory poweroff_basic.yml --user admin -k -b -v
+
+# Usar script que obtiene IP a partir de las MAC
+ansible-playbook -i inventory_mac.py macs.txt mi_playbook.yml [otros parametros]
+
+# Apagado inmediato
+ansible-playbook -i inventory shutdown.yml
+
+# Apagado con delay específico
+ansible-playbook -i inventory shutdown.yml -e "shutdown_minutes=5"
+
+# Apagar solo ciertos grupos
+ansible-playbook -i inventory shutdown.yml --limit "webservers"
+
+# En modo prueba
+ansible-playbook -i inventory shutdown.yml --check --diff
+
+
+Comandos Alternativos por SO
+
+
+Para Linux:
+
+shutdown -h now (apagado inmediato)
+poweroff (apagado directo)
+init 0 (cambio a runlevel 0)
+
+
+
+Para Windows:
+
+yaml
+- name: Apagar Windows
+  ansible.windows.win_shutdown:
+    msg: "Apagado por Ansible"
+    timeout: 30
+    force: yes

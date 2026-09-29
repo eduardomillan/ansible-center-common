@@ -1,0 +1,21 @@
+---
+- name: Apagar equipos del inventory
+  hosts: all
+  become: true
+  tasks:
+    # Se lanza en segundo plano con un pequeño retardo para que Ansible
+    # pueda cerrar la conexión SSH antes de que el equipo se apague.
+    - name: Apagar el sistema inmediatamente
+      ansible.builtin.shell: sleep 2 && /sbin/shutdown -h now
+      async: 30
+      poll: 0
+      changed_when: true
+
+    - name: Esperar a que los equipos se apaguen
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host | default(inventory_hostname) }}"
+        port: 22
+        state: stopped
+        timeout: 60
+      delegate_to: localhost
+      become: false

@@ -1,0 +1,38 @@
+---
+- name: Configuración mínima Veyon Client Lliurex
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Habilitar Repoman e instalar Veyon
+      block:
+        - name: Habilitar Repoman
+          command: repoman-cli -e 2 -y
+        - name: Instalar Veyon
+          apt:
+            name:
+              - veyon-configurator
+              - veyon-plugins
+              - veyon-service
+            state: present
+        - name: Deshabilitar Repoman
+          command: repoman-cli -d 2 -y
+
+    - name: Aplicar configuración específica
+      shell: |
+        veyon-cli config set Network/Role 0
+        veyon-cli config set Service/AutoStart true
+        veyon-cli config set Service/HideTrayIcon true
+        veyon-cli config set Authentication/Method 0
+        veyon-cli config set Authentication/Backend 1
+        veyon-cli config set UserInterface/NotificationIconEnabled false
+        veyon-cli config set UserInterface/AccessNotificationEnabled false
+        veyon-cli config set UserInterface/ConnectionNotificationEnabled false
+        veyon-cli config set AccessControl/Backend 0
+        veyon-cli config set AccessControl/AccessRule 0
+
+    - name: Activar servicio
+      systemd:
+        name: veyon
+        enabled: yes
+        state: started

@@ -1,0 +1,65 @@
+---
+- name: Wake on LAN y verificación de arranque
+  hosts: localhost
+  gather_facts: false
+  become: false
+  vars:
+    wol_broadcast: "172.28.222.255" # Cambia por tu broadcast address
+    wol_port: 9
+
+  tasks:
+    - name: Mostrar equipos objetivo
+      ansible.builtin.debug:
+        msg: "Equipos a encender: {{ groups['devices'] | length }}"
+
+    - name: Enviar paquetes Wake-on-LAN
+      community.general.wakeonlan:
+        mac: "{{ hostvars[item].mac_address }}"
+        broadcast: "{{ wol_broadcast }}"
+        port: "{{ wol_port }}"
+      loop: "{{ groups['devices'] }}"
+
+    - name: Esperar a que los equipos estén disponibles
+      ansible.builtin.pause:
+        minutes: 1
+
+- name: Verificar equipos encendidos
+  hosts: devices
+  gather_facts: false
+  vars:
+    connection_timeout: 30
+    connection_retries: 2
+    retry_delay: 5
+
+  tasks:
+    - name: Intentar conexión SSH
+      ansible.builtin.wait_for_connection:
+        timeout: "{{ connection_timeout }}"
+        connect_timeout: "{{ connection_timeout }}"
+        delay: "{{ retry_delay }}"
+        sleep: "{{ retry_delay }}"
+      register: connection_result
+      retries: "{{ connection_retries }}"
+      delay: "{{ retry_delay }}"
+      until: connection_result is succeeded
+
+    - name: Obtener información del sistema
+      ansible.builtin.setup:
+        gather_subset:
+          - min
+          - hardware
+          - network
+
+    - name: Mostrar información del equipo
+      ansible.builtin.debug:
+        msg: |
+          Equipo: {{ inventory_hostname }}
+          Estado: ENCENDIDO ✓
+          IP: {{ ansible_default_ipv4.address | default('desconocida') }}
+          Sistema: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Uptime: {{ '%d h %02d min' | format((ansible_uptime_seconds | int) // 3600, ((ansible_uptime_seconds | int) % 3600) // 60) }}
+
+    - name: Mostrar resumen final
+      ansible.builtin.debug:
+        msg: "Resumen - Equipos encendidos: {{ ansible_play_hosts | length }} / {{ groups['devices'] | length }}"
+      run_once: true

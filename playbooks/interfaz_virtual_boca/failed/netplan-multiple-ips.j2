@@ -1,0 +1,11 @@
+# templates/netplan-multiple-ips.j2
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    {{ interface_target }}:
+      dhcp4: true
+      dhcp6: false
+      optional: true
+      addresses:
+        - {{ cidr_alias }}
