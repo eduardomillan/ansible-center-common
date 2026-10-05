@@ -249,6 +249,10 @@ main() {
     fi
     archivo_salida="$dir_salida/macs_$(sanear_nombre_archivo "$RED_NOMBRE")_temp.txt"
 
+    # Línea de salida estable para scripts que orquesten este (ver run_playbook.sh):
+    # no depende del texto en español, que puede cambiar.
+    echo "RUTA_SALIDA=$archivo_salida"
+
     if [ -n "${ANSIBLE_CENTER_PATH:-}" ]; then
         echo "💾 Guardando en $archivo_salida (ANSIBLE_CENTER_PATH definida)"
     else

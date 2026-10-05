@@ -257,6 +257,10 @@ ansible-playbook playbooks/restart/restart.yml \
 
 **Ubicación**: `playbooks/ssh-check/`
 
+**Archivos principales**:
+- `ssh_check_basic.yaml` - Comprobación rápida (ping SSH, conexión sí/no)
+- `ssh_check_advanced.yaml` - Comprobación detallada (distingue encendido/apagado, puerto cerrado, error de autenticación, etc.)
+
 **Descripción**:
 Verifica que la conectividad SSH esté disponible en todos los hosts del inventario. Útil para:
 - Diagnosticar problemas de conectividad
@@ -265,7 +269,11 @@ Verifica que la conectividad SSH esté disponible en todos los hosts del inventa
 
 **Uso**:
 ```bash
-ansible-playbook playbooks/ssh-check/check.yml \
+ansible-playbook playbooks/ssh-check/ssh_check_basic.yaml \
+  -i inventories/inventory.ini
+
+# Variante con detalle de estados (puerto cerrado, auth fallida, etc.)
+ansible-playbook playbooks/ssh-check/ssh_check_advanced.yaml \
   -i inventories/inventory.ini
 ```
 

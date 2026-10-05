@@ -389,6 +389,9 @@ def main():
 
     dir_salida = _determinar_directorio_salida()
     inventory_file = os.path.join(dir_salida, f"inventory_{red_etiqueta}_generated.ini")
+    # Línea de salida estable para scripts que orquesten este (ver run_playbook.sh):
+    # no depende del texto en español, que puede cambiar.
+    print(f"RUTA_SALIDA={inventory_file}")
     print(f"💾 Guardando en {inventory_file}", file=sys.stderr)
 
     # Generar inventory INI con hostname como identificador principal
