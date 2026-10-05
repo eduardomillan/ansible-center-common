@@ -170,7 +170,7 @@ ansible_become=yes
 
 ### Variable de entorno `ANSIBLE_CENTER_PATH`
 
-Si trabajas con ambos repos a la vez (este repo público `ansible-center-common` y tu repo privado de datos, p. ej. `ansible-center-boca`) en el mismo equipo, los scripts de `scripts/` (ver `scripts/SCRIPTS_HOWTO.md`) pueden localizar automáticamente el `inventories/available_networks.json` de tu repo privado sin que tengas que pasar rutas completas cada vez.
+Si trabajas con ambos repos a la vez (este repo público `ansible-center-common` y tu repo privado de datos, p. ej. `ansible-center-boca`) en el mismo equipo, los scripts de `scripts/` (ver `scripts/SCRIPTS_HOWTO.md`) pueden localizar automáticamente tanto el `inventories/available_networks.json` como los ficheros de MACs (`macs_*.txt`) de tu repo privado, sin que tengas que pasar rutas completas cada vez ni ejecutar los scripts desde dentro de ese repo.
 
 Para ello, exporta `ANSIBLE_CENTER_PATH` apuntando a la raíz de tu repo de datos:
 
@@ -179,14 +179,24 @@ Para ello, exporta `ANSIBLE_CENTER_PATH` apuntando a la raíz de tu repo de dato
 export ANSIBLE_CENTER_PATH="$HOME/ansible-center-boca"
 ```
 
-**Orden de búsqueda** que siguen los scripts al resolver las redes predefinidas:
+⚠️ **Importante si usas `sudo`**: estos scripts necesitan sudo para ejecutar `nmap`, pero `sudo` **limpia el entorno por defecto** y no propaga `ANSIBLE_CENTER_PATH` (ni ninguna otra variable que hayas exportado en tu shell) al proceso elevado. Usa `sudo -E` para conservarla:
 
-1. `$ANSIBLE_CENTER_PATH/inventories/available_networks.json` (si la variable está definida).
-2. `inventories/available_networks.json` del propio repo donde vive el script (`ansible-center-common`) — este es el comportamiento por defecto si no defines la variable, útil para quien solo ha clonado el repo público.
-3. `inventories/available_networks.sample.json` (plantilla de ejemplo) en el mismo repo, si no existe el fichero real.
-4. Un pequeño conjunto de redes embebido en el propio script, como último recurso.
+```bash
+# Aunque estés en ansible-center-common y macs_inf3_alu.txt viva en
+# ansible-center-boca/inventories/, esto funciona (nota el -E):
+sudo -E ./scripts/verifica_mac_ip_v3.py macs_inf3_alu.txt INFOR3
+```
 
-Si no se encuentra el fichero real y se usa la plantilla de ejemplo, los scripts avisan por `stderr`. No es necesario definir `ANSIBLE_CENTER_PATH` si ejecutas los scripts dentro de tu repo privado o si solo usas el repo público con datos de ejemplo.
+Si olvidas el `-E`, el script lo detecta y te lo recuerda en el propio mensaje de aviso/error.
+
+**Orden de búsqueda** que siguen los scripts, tanto para las redes predefinidas como para el fichero de MACs que les pases como argumento:
+
+1. Tal cual se ha indicado (ruta relativa al directorio actual o absoluta) — si existe, se usa sin más.
+2. `$ANSIBLE_CENTER_PATH/inventories/<nombre_fichero>` (si la variable está definida).
+3. `inventories/<nombre_fichero>` del propio repo donde vive el script (`ansible-center-common`) — este es el comportamiento por defecto si no defines la variable, útil para quien solo ha clonado el repo público.
+4. Solo para las redes predefinidas: si no se encuentra `available_networks.json` en ninguno de los sitios anteriores, un pequeño conjunto embebido en el propio script, como último recurso (avisando por `stderr`). Para el fichero de MACs no hay fallback: si no se encuentra en ninguno de los sitios anteriores, el script termina con un error.
+
+`inventories/available_networks.sample.json` **no** forma parte de esta búsqueda: es solo una plantilla de ejemplo para copiar a `available_networks.json` y adaptar a tu centro, no una fuente que los scripts consulten en tiempo de ejecución. No es necesario definir `ANSIBLE_CENTER_PATH` si ejecutas los scripts dentro de tu repo privado (donde ya existen `inventories/available_networks.json` y tus ficheros de MACs).
 
 ## 🎯 Playbooks Disponibles
 

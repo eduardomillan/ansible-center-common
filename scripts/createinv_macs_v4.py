@@ -5,7 +5,10 @@
 # Cómo usar: sudo python3 createinv_macs.py macs.txt [red]
 #
 # (Necesario ejecutar con sudo porque usa nmap...)
-# Genera el archivo: INVENTORY_FILE (inventory_generated.ini)
+# Genera inventory_<RED>_generated.ini (p. ej. inventory_MACROLAN_generated.ini),
+# dentro de inventories/: en $ANSIBLE_CENTER_PATH/inventories/ si esa variable
+# está definida, o en inventories/ del directorio actual en caso contrario
+# (se crea el directorio si no existe).
 
 # Usar con Ansible
 # ansible-playbook -i inventory_mac.py macs.txt mi_playbook.yml --ask-become-pass
@@ -57,16 +60,12 @@ _REDES_FALLBACK = {
 _RED_DEFAULT_FALLBACK = 'MACROLAN'
 
 
-def _localizar_redes_disponibles():
-    """Carga las redes predefinidas desde inventories/available_networks.json.
+def _rutas_candidatas_inventories():
+    """Directorios inventories/ donde buscar datos del centro (redes, MACs...).
 
-    Busca primero en $ANSIBLE_CENTER_PATH/inventories (variable de entorno
-    que cada usuario apunta a su repo de datos, p.ej. ansible-center-boca)
-    y, si no está definida o no contiene el fichero, en el inventories/
-    del propio repo donde vive este script (ansible-center-common). Si no
-    encuentra el fichero real, usa la plantilla available_networks.sample.json
-    como respaldo y avisa; si no hay ninguno de los dos, usa un fallback
-    embebido en el script.
+    Primero el de $ANSIBLE_CENTER_PATH (variable de entorno que cada usuario
+    apunta a su repo de datos, p.ej. ansible-center-boca) y después el del
+    propio repo donde vive este script (ansible-center-common).
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     candidatos_dir = []
@@ -76,27 +75,70 @@ def _localizar_redes_disponibles():
         candidatos_dir.append(os.path.join(center_path, 'inventories'))
 
     candidatos_dir.append(os.path.normpath(os.path.join(script_dir, '..', 'inventories')))
+    return candidatos_dir
 
-    for directorio in candidatos_dir:
-        for nombre_fichero in ('available_networks.json', 'available_networks.sample.json'):
-            ruta = os.path.join(directorio, nombre_fichero)
-            if not os.path.isfile(ruta):
+
+def _aviso_sudo_sin_preservar_entorno():
+    """Si el proceso corre bajo sudo y no ve ANSIBLE_CENTER_PATH, puede ser
+    porque 'sudo' limpia el entorno por defecto (no porque la variable no
+    esté definida en tu shell). Devuelve una pista para el usuario, o
+    cadena vacía si no aplica."""
+    if os.environ.get('SUDO_USER') and not os.environ.get('ANSIBLE_CENTER_PATH'):
+        return (f"\n💡 Si tienes ANSIBLE_CENTER_PATH definida en tu shell, recuerda que "
+                f"'sudo' no la conserva por defecto; usa 'sudo -E' para propagarla, "
+                f"p. ej.: sudo -E {os.path.basename(sys.argv[0])} ...")
+    return ""
+
+
+def _resolver_ruta_datos(nombre_archivo):
+    """Localiza un fichero de datos (MACs, inventarios...) dado por el usuario.
+
+    Si `nombre_archivo` existe tal cual (ruta relativa al directorio actual
+    o absoluta), se usa sin modificar. Si no, se busca su nombre base dentro
+    de cada inventories/ candidato (ver _rutas_candidatas_inventories), para
+    poder invocar el script con solo el nombre del fichero aunque los datos
+    vivan en otro repo (p. ej. ansible-center-boca vía $ANSIBLE_CENTER_PATH).
+    Devuelve la ruta encontrada, o None si no se encuentra en ningún sitio.
+    """
+    if os.path.isfile(nombre_archivo):
+        return nombre_archivo
+
+    nombre_base = os.path.basename(nombre_archivo)
+    for directorio in _rutas_candidatas_inventories():
+        ruta = os.path.join(directorio, nombre_base)
+        if os.path.isfile(ruta):
+            return ruta
+
+    return None
+
+
+def _localizar_redes_disponibles():
+    """Carga las redes predefinidas desde inventories/available_networks.json.
+
+    Busca en los directorios de _rutas_candidatas_inventories() (primero
+    $ANSIBLE_CENTER_PATH/inventories, luego el inventories/ del propio
+    repo). No se usa available_networks.sample.json como fuente real: es
+    solo una plantilla de ejemplo para copiar y adaptar. Si no se encuentra
+    el fichero real en ninguno de los dos sitios, usa un fallback embebido
+    en el script.
+    """
+    for directorio in _rutas_candidatas_inventories():
+        ruta = os.path.join(directorio, 'available_networks.json')
+        if not os.path.isfile(ruta):
+            continue
+        try:
+            with open(ruta, 'r') as f:
+                datos = json.load(f)
+            redes = {nombre.upper(): info['cidr'] for nombre, info in datos.get('networks', {}).items()}
+            if not redes:
                 continue
-            try:
-                with open(ruta, 'r') as f:
-                    datos = json.load(f)
-                redes = {nombre.upper(): info['cidr'] for nombre, info in datos.get('networks', {}).items()}
-                if not redes:
-                    continue
-                if nombre_fichero.endswith('.sample.json'):
-                    print(f"⚠️  No se encontró available_networks.json; usando la plantilla de ejemplo ({ruta})", file=sys.stderr)
-                default_red = str(datos.get('default', '')).upper()
-                red_default = default_red if default_red in redes else next(iter(redes))
-                return redes, red_default
-            except (json.JSONDecodeError, OSError, KeyError, AttributeError) as e:
-                print(f"⚠️  Error leyendo {ruta}: {e}", file=sys.stderr)
+            default_red = str(datos.get('default', '')).upper()
+            red_default = default_red if default_red in redes else next(iter(redes))
+            return redes, red_default
+        except (json.JSONDecodeError, OSError, KeyError, AttributeError) as e:
+            print(f"⚠️  Error leyendo {ruta}: {e}", file=sys.stderr)
 
-    print("⚠️  No se encontró available_networks.json ni available_networks.sample.json; usando redes por defecto embebidas en el script", file=sys.stderr)
+    print(f"⚠️  No se encontró available_networks.json (ni en $ANSIBLE_CENTER_PATH/inventories ni en el repo); usando redes por defecto embebidas en el script{_aviso_sudo_sin_preservar_entorno()}", file=sys.stderr)
     return dict(_REDES_FALLBACK), _RED_DEFAULT_FALLBACK
 
 
@@ -107,7 +149,19 @@ REDES_DISPONIBLES, _RED_DEFAULT_NOMBRE = _localizar_redes_disponibles()
 NETWORK = REDES_DISPONIBLES[_RED_DEFAULT_NOMBRE]
 
 ADMIN = "me.millan"
-INVENTORY_FILE = "inventory_generated.ini"
+
+
+def _determinar_directorio_salida():
+    """Directorio donde guardar el inventory generado.
+
+    $ANSIBLE_CENTER_PATH/inventories si esa variable está definida, o
+    inventories/ del directorio actual en caso contrario. Se crea si no
+    existe (mismo criterio que scripts/obtener_macs_ip_red.sh).
+    """
+    center_path = os.environ.get('ANSIBLE_CENTER_PATH')
+    directorio = os.path.join(center_path.rstrip('/'), 'inventories') if center_path else 'inventories'
+    os.makedirs(directorio, exist_ok=True)
+    return directorio
 
 def verificar_sudo():
     """Verifica si tenemos permisos de sudo"""
@@ -159,17 +213,23 @@ def validar_formato_red(red):
     return True
 
 def obtener_red(parametro_red):
-    """Obtiene la red a escanear basada en el parámetro proporcionado"""
+    """Obtiene (cidr, etiqueta) de la red a escanear según el parámetro dado.
+
+    La etiqueta se usa para nombrar el fichero de salida (inventory_<etiqueta>_generated.ini):
+    el nombre de red predefinido, o el propio CIDR con '/' sustituido por '-'
+    si se indicó directamente.
+    """
     if not parametro_red:
-        return NETWORK
+        return NETWORK, _RED_DEFAULT_NOMBRE
 
     # Si es un nombre predefinido, usar la red correspondiente
     if parametro_red.upper() in REDES_DISPONIBLES:
-        return REDES_DISPONIBLES[parametro_red.upper()]
+        nombre = parametro_red.upper()
+        return REDES_DISPONIBLES[nombre], nombre
 
     # Verificar si es una red en formato CIDR válido
     if validar_formato_red(parametro_red):
-        return parametro_red
+        return parametro_red, parametro_red.replace('/', '-')
 
     # Si no es reconocido, mostrar error
     print(f"❌ Error: Formato de red no válido: {parametro_red}", file=sys.stderr)
@@ -284,11 +344,11 @@ def main():
         mostrar_ayuda()
         sys.exit(1)
 
-    archivo_macs = sys.argv[1]
+    archivo_macs_arg = sys.argv[1]
 
     # Determinar qué red usar
     red_parametro = sys.argv[2] if len(sys.argv) >= 3 else None
-    network = obtener_red(red_parametro)
+    network, red_etiqueta = obtener_red(red_parametro)
 
     if red_parametro:
         print(f"🌐 Usando red especificada: {network}", file=sys.stderr)
@@ -301,9 +361,12 @@ def main():
         print("💡 Ejecuta con: sudo python3 createinv_macs.py archivo_macs.txt [red]", file=sys.stderr)
         sys.exit(1)
 
-    if not os.path.exists(archivo_macs):
-        print(f"Error: Archivo {archivo_macs} no encontrado", file=sys.stderr)
+    archivo_macs = _resolver_ruta_datos(archivo_macs_arg)
+    if archivo_macs is None:
+        print(f"Error: Archivo {archivo_macs_arg} no encontrado (ni en el directorio actual ni en inventories/ de $ANSIBLE_CENTER_PATH o del repo){_aviso_sudo_sin_preservar_entorno()}", file=sys.stderr)
         sys.exit(1)
+    if archivo_macs != archivo_macs_arg:
+        print(f"📂 Usando {archivo_macs} (resuelto vía inventories/)", file=sys.stderr)
 
     # Obtener permisos del archivo de MACs original
     permisos_originales = obtener_permisos_archivo(archivo_macs)
@@ -324,8 +387,12 @@ def main():
     # Obtener IPs (ahora con sudo) - pasando la red como parámetro
     mac_ip_map = obtener_ips_por_mac(macs_buscar, network)
 
+    dir_salida = _determinar_directorio_salida()
+    inventory_file = os.path.join(dir_salida, f"inventory_{red_etiqueta}_generated.ini")
+    print(f"💾 Guardando en {inventory_file}", file=sys.stderr)
+
     # Generar inventory INI con hostname como identificador principal
-    with open(INVENTORY_FILE, 'w') as f:
+    with open(inventory_file, 'w') as f:
         f.write('# Inventory generado automáticamente\n')
         f.write(f'# Red escaneada: {network}\n')
         f.write(f'# Archivo fuente: {archivo_macs}\n\n')
@@ -360,10 +427,10 @@ def main():
         f.write('ansible_connection=ssh\n')
 
     # Aplicar los mismos permisos al archivo generado
-    aplicar_permisos_archivo(INVENTORY_FILE, permisos_originales)
+    aplicar_permisos_archivo(inventory_file, permisos_originales)
 
     print(f"📊 Resultado: {encontradas}/{len(equipos)} equipos encontrados en la red", file=sys.stderr)
-    print(f"💾 Inventory guardado en: {INVENTORY_FILE}", file=sys.stderr)
+    print(f"💾 Inventory guardado en: {inventory_file}", file=sys.stderr)
     print(f"🎯 Identificadores principales: hostnames (ej: {equipos[0]['host_name']})", file=sys.stderr)
 
 

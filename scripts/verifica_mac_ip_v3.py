@@ -43,16 +43,12 @@ _REDES_FALLBACK = {
 _RED_DEFAULT_FALLBACK = 'MACROLAN'
 
 
-def _localizar_redes_disponibles():
-    """Carga las redes predefinidas desde inventories/available_networks.json.
+def _rutas_candidatas_inventories():
+    """Directorios inventories/ donde buscar datos del centro (redes, MACs...).
 
-    Busca primero en $ANSIBLE_CENTER_PATH/inventories (variable de entorno
-    que cada usuario apunta a su repo de datos, p.ej. ansible-center-boca)
-    y, si no está definida o no contiene el fichero, en el inventories/
-    del propio repo donde vive este script (ansible-center-common). Si no
-    encuentra el fichero real, usa la plantilla available_networks.sample.json
-    como respaldo y avisa; si no hay ninguno de los dos, usa un fallback
-    embebido en el script.
+    Primero el de $ANSIBLE_CENTER_PATH (variable de entorno que cada usuario
+    apunta a su repo de datos, p.ej. ansible-center-boca) y después el del
+    propio repo donde vive este script (ansible-center-common).
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
     candidatos_dir = []
@@ -62,27 +58,70 @@ def _localizar_redes_disponibles():
         candidatos_dir.append(os.path.join(center_path, 'inventories'))
 
     candidatos_dir.append(os.path.normpath(os.path.join(script_dir, '..', 'inventories')))
+    return candidatos_dir
 
-    for directorio in candidatos_dir:
-        for nombre_fichero in ('available_networks.json', 'available_networks.sample.json'):
-            ruta = os.path.join(directorio, nombre_fichero)
-            if not os.path.isfile(ruta):
+
+def _aviso_sudo_sin_preservar_entorno():
+    """Si el proceso corre bajo sudo y no ve ANSIBLE_CENTER_PATH, puede ser
+    porque 'sudo' limpia el entorno por defecto (no porque la variable no
+    esté definida en tu shell). Devuelve una pista para el usuario, o
+    cadena vacía si no aplica."""
+    if os.environ.get('SUDO_USER') and not os.environ.get('ANSIBLE_CENTER_PATH'):
+        return (f"\n💡 Si tienes ANSIBLE_CENTER_PATH definida en tu shell, recuerda que "
+                f"'sudo' no la conserva por defecto; usa 'sudo -E' para propagarla, "
+                f"p. ej.: sudo -E {os.path.basename(sys.argv[0])} ...")
+    return ""
+
+
+def _resolver_ruta_datos(nombre_archivo):
+    """Localiza un fichero de datos (MACs, inventarios...) dado por el usuario.
+
+    Si `nombre_archivo` existe tal cual (ruta relativa al directorio actual
+    o absoluta), se usa sin modificar. Si no, se busca su nombre base dentro
+    de cada inventories/ candidato (ver _rutas_candidatas_inventories), para
+    poder invocar el script con solo el nombre del fichero aunque los datos
+    vivan en otro repo (p. ej. ansible-center-boca vía $ANSIBLE_CENTER_PATH).
+    Devuelve la ruta encontrada, o None si no se encuentra en ningún sitio.
+    """
+    if os.path.isfile(nombre_archivo):
+        return nombre_archivo
+
+    nombre_base = os.path.basename(nombre_archivo)
+    for directorio in _rutas_candidatas_inventories():
+        ruta = os.path.join(directorio, nombre_base)
+        if os.path.isfile(ruta):
+            return ruta
+
+    return None
+
+
+def _localizar_redes_disponibles():
+    """Carga las redes predefinidas desde inventories/available_networks.json.
+
+    Busca en los directorios de _rutas_candidatas_inventories() (primero
+    $ANSIBLE_CENTER_PATH/inventories, luego el inventories/ del propio
+    repo). No se usa available_networks.sample.json como fuente real: es
+    solo una plantilla de ejemplo para copiar y adaptar. Si no se encuentra
+    el fichero real en ninguno de los dos sitios, usa un fallback embebido
+    en el script.
+    """
+    for directorio in _rutas_candidatas_inventories():
+        ruta = os.path.join(directorio, 'available_networks.json')
+        if not os.path.isfile(ruta):
+            continue
+        try:
+            with open(ruta, 'r') as f:
+                datos = json.load(f)
+            redes = {nombre.upper(): info['cidr'] for nombre, info in datos.get('networks', {}).items()}
+            if not redes:
                 continue
-            try:
-                with open(ruta, 'r') as f:
-                    datos = json.load(f)
-                redes = {nombre.upper(): info['cidr'] for nombre, info in datos.get('networks', {}).items()}
-                if not redes:
-                    continue
-                if nombre_fichero.endswith('.sample.json'):
-                    print(f"⚠️  No se encontró available_networks.json; usando la plantilla de ejemplo ({ruta})", file=sys.stderr)
-                default_red = str(datos.get('default', '')).upper()
-                red_default = default_red if default_red in redes else next(iter(redes))
-                return redes, red_default
-            except (json.JSONDecodeError, OSError, KeyError, AttributeError) as e:
-                print(f"⚠️  Error leyendo {ruta}: {e}", file=sys.stderr)
+            default_red = str(datos.get('default', '')).upper()
+            red_default = default_red if default_red in redes else next(iter(redes))
+            return redes, red_default
+        except (json.JSONDecodeError, OSError, KeyError, AttributeError) as e:
+            print(f"⚠️  Error leyendo {ruta}: {e}", file=sys.stderr)
 
-    print("⚠️  No se encontró available_networks.json ni available_networks.sample.json; usando redes por defecto embebidas en el script", file=sys.stderr)
+    print(f"⚠️  No se encontró available_networks.json (ni en $ANSIBLE_CENTER_PATH/inventories ni en el repo); usando redes por defecto embebidas en el script{_aviso_sudo_sin_preservar_entorno()}", file=sys.stderr)
     return dict(_REDES_FALLBACK), _RED_DEFAULT_FALLBACK
 
 
@@ -127,12 +166,18 @@ def obtener_red(parametro_red):
     sys.exit(1)
 
 def escanear_red_completa(network):
-    """Escanea toda la red una vez y devuelve un diccionario MAC->IP"""
+    """Escanea toda la red una vez y devuelve un diccionario MAC->IP.
+
+    Se invoca nmap con 'sudo' explícitamente (igual que createinv_macs_v4.py):
+    sin esto, si el proceso no corre ya como root, nmap -sn no revela
+    direcciones MAC (requiere ARP) y el resultado saldría vacío sin ningún
+    error visible.
+    """
     print(f"🔍 Escaneando red completa {network}...")
     mac_ip_map = {}
 
     try:
-        resultado = subprocess.run(['nmap', '-sn', network],
+        resultado = subprocess.run(['sudo', 'nmap', '-sn', network],
                                  capture_output=True, text=True, timeout=120)
 
         lineas = resultado.stdout.split('\n')
@@ -198,8 +243,15 @@ def main():
         mostrar_ayuda()
         sys.exit(1)
 
-    archivo_entrada = sys.argv[1]
-    
+    archivo_entrada_arg = sys.argv[1]
+
+    archivo_entrada = _resolver_ruta_datos(archivo_entrada_arg)
+    if archivo_entrada is None:
+        print(f"Error: Archivo {archivo_entrada_arg} no encontrado (ni en el directorio actual ni en inventories/ de $ANSIBLE_CENTER_PATH o del repo){_aviso_sudo_sin_preservar_entorno()}")
+        sys.exit(1)
+    if archivo_entrada != archivo_entrada_arg:
+        print(f"📂 Usando {archivo_entrada} (resuelto vía inventories/)")
+
     # Obtener red (parámetro opcional)
     red_parametro = sys.argv[2] if len(sys.argv) == 3 else None
     network = obtener_red(red_parametro)
@@ -214,6 +266,11 @@ def main():
     # Escanear la red UNA SOLA VEZ
     mac_ip_map = escanear_red_completa(network)
     print(f"✅ Encontradas {len(mac_ip_map)} direcciones MAC en la red")
+
+    if not mac_ip_map and equipos:
+        print(f"⚠️  nmap no ha devuelto ninguna dirección MAC en {network}. Si hay equipos activos en esa red, "
+              f"comprueba que estás en el mismo segmento local (nmap necesita ARP, no funciona a través de un router) "
+              f"y que el proceso tiene privilegios de root.{_aviso_sudo_sin_preservar_entorno()}")
 
     resultados = []
     stats = {'correctas': 0, 'incorrectas': 0, 'no_encontradas': 0}
