@@ -1,6 +1,0 @@
-# Archivo CSSH generado automáticamente desde MACs
-# Ejemplo de uso: cssh -c archivo_cssh.txt 1fpbalu -l usuario
-
-# 1fpbalu: fpb105, fpb103, fpb107, fpb106, fpb104, fpb101, fpb102
-1fpbalu 172.28.222.{35,50,56,64,72,88,214}
-

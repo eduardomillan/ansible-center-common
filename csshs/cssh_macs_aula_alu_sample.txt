@@ -1,0 +1,6 @@
+# Archivo CSSH generado automáticamente desde MACs
+# Ejemplo de uso: cssh -c archivo_cssh.txt grupo -l usuario
+
+# grupo: equipos del grupo
+grupo 172.28.222.{10,11,12,13,14,15}
+

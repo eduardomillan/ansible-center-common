@@ -17,9 +17,6 @@ password_ENV.txt
 
 # Configuración específica (repo privado)
 .local/
-csshs/
-setup_local_config.local.sh
-setup_local_config.sh
 ansible.cfg.local
 local_vars.sh
 

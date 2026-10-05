@@ -1,6 +1,0 @@
-# Archivo CSSH generado automáticamente desde MACs
-# Ejemplo de uso: cssh -c archivo_cssh.txt inf3all -l usuario
-
-# inf3all: inf3profe, inf301, inf302, inf303, inf304, inf305, inf306, inf307, inf308, inf309, inf310, inf311, inf312, inf313, inf314, inf315, inf316, inf317, inf318
-inf3all 172.28.222.{13,20,33,38,57,63,70,71,107,114,148,149,161,179,188,194,204,230,233}
-
