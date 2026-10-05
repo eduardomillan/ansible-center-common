@@ -26,20 +26,71 @@
 #
 
 import subprocess
+import json
+import os
 import re
 import sys
 
-# Redes predefinidas
-REDES_PREDEFINIDAS = {
+# Fallback embebido por si no se encuentra inventories/available_networks.json
+# ni su plantilla inventories/available_networks.sample.json
+_REDES_FALLBACK = {
     'WIFI_ALU': '10.252.25.0/24',
     'WIFI_PROFES': '10.185.97.0/24',
     'MACROLAN': '172.28.222.0/24',
     'INFOR3': '10.113.44.64/26',
     'HOME': '192.168.0.0/24'
 }
+_RED_DEFAULT_FALLBACK = 'MACROLAN'
+
+
+def _localizar_redes_disponibles():
+    """Carga las redes predefinidas desde inventories/available_networks.json.
+
+    Busca primero en $ANSIBLE_CENTER_PATH/inventories (variable de entorno
+    que cada usuario apunta a su repo de datos, p.ej. ansible-center-boca)
+    y, si no está definida o no contiene el fichero, en el inventories/
+    del propio repo donde vive este script (ansible-center-common). Si no
+    encuentra el fichero real, usa la plantilla available_networks.sample.json
+    como respaldo y avisa; si no hay ninguno de los dos, usa un fallback
+    embebido en el script.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidatos_dir = []
+
+    center_path = os.environ.get('ANSIBLE_CENTER_PATH')
+    if center_path:
+        candidatos_dir.append(os.path.join(center_path, 'inventories'))
+
+    candidatos_dir.append(os.path.normpath(os.path.join(script_dir, '..', 'inventories')))
+
+    for directorio in candidatos_dir:
+        for nombre_fichero in ('available_networks.json', 'available_networks.sample.json'):
+            ruta = os.path.join(directorio, nombre_fichero)
+            if not os.path.isfile(ruta):
+                continue
+            try:
+                with open(ruta, 'r') as f:
+                    datos = json.load(f)
+                redes = {nombre.upper(): info['cidr'] for nombre, info in datos.get('networks', {}).items()}
+                if not redes:
+                    continue
+                if nombre_fichero.endswith('.sample.json'):
+                    print(f"⚠️  No se encontró available_networks.json; usando la plantilla de ejemplo ({ruta})", file=sys.stderr)
+                default_red = str(datos.get('default', '')).upper()
+                red_default = default_red if default_red in redes else next(iter(redes))
+                return redes, red_default
+            except (json.JSONDecodeError, OSError, KeyError, AttributeError) as e:
+                print(f"⚠️  Error leyendo {ruta}: {e}", file=sys.stderr)
+
+    print("⚠️  No se encontró available_networks.json ni available_networks.sample.json; usando redes por defecto embebidas en el script", file=sys.stderr)
+    return dict(_REDES_FALLBACK), _RED_DEFAULT_FALLBACK
+
+
+# Redes predefinidas
+REDES_PREDEFINIDAS, _RED_DEFAULT_NOMBRE = _localizar_redes_disponibles()
 
 # Red por defecto
-NETWORK_DEFAULT = REDES_PREDEFINIDAS['MACROLAN']
+NETWORK_DEFAULT = REDES_PREDEFINIDAS[_RED_DEFAULT_NOMBRE]
 
 def verificar_sudo():
     """Verifica permisos de sudo y sale si no los tiene"""

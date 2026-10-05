@@ -1,0 +1,10 @@
+{
+  "_readme": "Plantilla de redes disponibles para los scripts",
+  "default": "LAN",
+  "networks": {
+    "LAN": {
+      "cidr": "192.168.0.0/24",
+      "description": "Red cableada principal (ejemplo)"
+    }
+  }
+}

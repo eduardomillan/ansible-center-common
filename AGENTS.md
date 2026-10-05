@@ -472,4 +472,5 @@ timeout = 60
 - Consultar archivos dentro de cada carpeta de playbook para detalles específicos
 - Ver `README.md` para información general del proyecto
 - Revisar `STRUCTURE.txt` para estructura recomendada de proyectos Ansible
+- Ver `scripts/SCRIPTS_HOWTO.md` para la documentación de los scripts auxiliares (generación de inventarios, conversión a ClusterSSH, verificación MAC/IP, etc.) usados para alimentar los inventarios que consumen estos playbooks
 
