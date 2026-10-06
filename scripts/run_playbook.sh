@@ -147,6 +147,11 @@ main() {
         exit 1
     fi
 
+    echo "ℹ️  ANSIBLE_CENTER_PATH: ${ANSIBLE_CENTER_PATH:-<no definida>}"
+    echo "ℹ️  --playbook (ruta recibida): $(realpath -m -- "$playbook_rel")"
+    [ -n "$inventory_arg" ] && echo "ℹ️  --inventory (ruta recibida): $(realpath -m -- "$inventory_arg")"
+    [ -n "$macs_arg" ] && echo "ℹ️  --macs (ruta recibida): $(realpath -m -- "$macs_arg")"
+
     local playbook_path
     if ! playbook_path="$(resolver_playbook "$playbook_rel")"; then
         echo "❌ Error: no se encontró el playbook '$playbook_rel' (ni en \$ANSIBLE_CENTER_PATH/playbooks/ ni en el repo)" >&2
