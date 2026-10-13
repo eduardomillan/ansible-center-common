@@ -34,13 +34,9 @@ import sys
 # Fallback embebido por si no se encuentra inventories/available_networks.json
 # ni su plantilla inventories/available_networks.sample.json
 _REDES_FALLBACK = {
-    'WIFI_ALU': '10.252.25.0/24',
-    'WIFI_PROFES': '10.185.97.0/24',
-    'MACROLAN': '172.28.222.0/24',
-    'INFOR3': '10.113.44.64/26',
     'HOME': '192.168.0.0/24'
 }
-_RED_DEFAULT_FALLBACK = 'MACROLAN'
+_RED_DEFAULT_FALLBACK = 'HOME'
 
 
 def _rutas_candidatas_inventories():
