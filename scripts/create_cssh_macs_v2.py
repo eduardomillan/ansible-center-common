@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """
 Script para convertir archivo de MACs a formato CSSH
-Uso: python macs_to_cssh.py archivo_macs.txt [nombre_grupo]
+Uso: python create_cssh_macs.py archivo_macs.txt [nombre_grupo]
 """
 
+import os
 import sys
 import re
 
@@ -114,8 +115,10 @@ def main():
     cssh_content = macs_to_cssh(macs_file, group_name)
     
     if cssh_content:
-        # Generar nombre de archivo de salida
-        base_name = macs_file.replace('.txt', '')
+        # Generar nombre de archivo de salida (solo el nombre base, sin
+        # el directorio de macs_file, para no intentar escribir en
+        # subdirectorios que no existen relativos al directorio actual)
+        base_name = os.path.basename(macs_file).replace('.txt', '')
         output_file = f"cssh_{base_name}_generated.txt"
         
         # Guardar archivo
